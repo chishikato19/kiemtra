@@ -16,17 +16,22 @@ export const storageService = {
   },
 
   async getQuizFromCloud(quizId: string): Promise<Quiz | null> {
+    // Đọc lại config mới nhất (phòng trường hợp App.tsx vừa lưu w= vào máy)
     const config = this.getAppConfig();
-    if (!config.globalWebhookUrl) return null;
+    if (!config.globalWebhookUrl) {
+      console.warn("Chưa có Webhook URL để tải đề từ Cloud.");
+      return null;
+    }
 
     try {
-      // Gọi Apps Script với tham số action=getQuiz
       const url = `${config.globalWebhookUrl}?action=getQuiz&quizId=${quizId}`;
       const response = await fetch(url);
+      
+      if (!response.ok) throw new Error("Network error");
+      
       const result = await response.json();
       
       if (result && result.id) {
-        // Lưu lại vào máy cục bộ để lần sau không cần load nữa
         this.saveQuiz(result);
         return result;
       }
