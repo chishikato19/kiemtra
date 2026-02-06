@@ -1,0 +1,7 @@
+{
+  "name": "QuizMaster Pro",
+  "description": "A comprehensive online quiz platform featuring AI-powered Word document parsing for teachers and a seamless testing interface for students.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
