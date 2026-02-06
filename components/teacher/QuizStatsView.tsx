@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { storageService } from '../../services/storageService';
 import { pdfService } from '../../services/pdfService';
 import { StudentSubmission } from '../../types';
+import { SubmissionDetailModal } from './SubmissionDetailModal';
 
 export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = ({ quizId, onBack }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,10 +13,10 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
   const [includeSignature, setIncludeSignature] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+  const [viewingSubmission, setViewingSubmission] = useState<StudentSubmission | null>(null);
   
   const quiz = useMemo(() => storageService.getQuizById(quizId), [quizId]);
 
-  // Khởi tạo danh sách bài làm từ local
   useEffect(() => {
     setSubmissions(storageService.getSubmissions(quizId));
   }, [quizId]);
@@ -44,7 +45,7 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
     return result;
   }, [submissions, searchQuery, classFilter, sortKey, sortOrder]);
 
-  const handlePrint = (subs: StudentSubmission[]) => {
+  const handlePrintAll = (subs: StudentSubmission[]) => {
     if (quiz) pdfService.generateReport(quiz, subs, includeSignature);
   };
 
@@ -64,7 +65,6 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
     try {
       const newCount = await storageService.syncResultsFromCloud(quizId);
       if (newCount > 0) {
-        // Cập nhật lại state để UI render ngay
         setSubmissions(storageService.getSubmissions(quizId));
         alert(`Đã tải thành công ${newCount} bài làm mới từ Cloud!`);
       } else {
@@ -99,7 +99,7 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
           </button>
 
           <button 
-            onClick={() => handlePrint(filteredAndSortedSubmissions)} 
+            onClick={() => handlePrintAll(filteredAndSortedSubmissions)} 
             className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-700"
           >
             📋 In toàn bộ (PDF)
@@ -158,7 +158,7 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <button onClick={() => handlePrint([s])} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all">📄 Xem bài</button>
+                    <button onClick={() => setViewingSubmission(s)} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all">📄 Xem bài</button>
                   </td>
                 </tr>
               ))}
@@ -166,6 +166,15 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
           </table>
         </div>
       </div>
+
+      {viewingSubmission && quiz && (
+        <SubmissionDetailModal 
+          submission={viewingSubmission} 
+          quiz={quiz} 
+          onClose={() => setViewingSubmission(null)}
+          onPrint={() => pdfService.generateReport(quiz, [viewingSubmission], includeSignature)}
+        />
+      )}
     </div>
   );
 };
