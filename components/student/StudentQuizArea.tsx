@@ -11,16 +11,15 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   const [userAnswers, setUserAnswers] = useState<number[]>([]);
   const [startTime, setStartTime] = useState(0);
   const [feedback, setFeedback] = useState<'none' | 'correct' | 'wrong'>('none');
-  const [timeLeft, setTimeLeft] = useState<number | null>(null); // giây
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); 
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Lưu danh sách câu hỏi đã xáo trộn
   const [shuffledQuestions, setShuffledQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
     const q = storageService.getQuizById(quizId);
     if (q) {
       setQuiz(q);
-      // Xáo trộn nếu được yêu cầu
       if (q.shuffleQuestions) {
         const shuffled = [...q.questions].sort(() => Math.random() - 0.5);
         setShuffledQuestions(shuffled);
@@ -30,7 +29,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     }
   }, [quizId]);
 
-  // Timer Effect
   useEffect(() => {
     if (stage === 'running' && timeLeft !== null) {
       if (timeLeft <= 0) {
@@ -96,8 +94,7 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     }
   };
 
-  const finalizeQuiz = (finalAnswers: number[]) => {
-    // Tính điểm dựa trên điểm số thực tế của mỗi câu hỏi thay vì tính trung bình
+  const finalizeQuiz = async (finalAnswers: number[]) => {
     const totalAchievedScore = finalAnswers.reduce((acc, val, idx) => {
       const isCorrect = val === shuffledQuestions[idx].correctAnswer;
       return acc + (isCorrect ? (shuffledQuestions[idx].points || 0) : 0);
@@ -116,6 +113,28 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     };
     
     storageService.saveSubmission(submission);
+
+    // Tự động đẩy lên Google Sheets nếu có Webhook
+    if (quiz.webhookUrl) {
+      setIsSyncing(true);
+      try {
+        await fetch(quiz.webhookUrl, {
+          method: 'POST',
+          mode: 'no-cors', // Cần thiết cho Apps Script Web App
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            timestamp: new Date().toLocaleString('vi-VN'),
+            quizTitle: quiz.title,
+            ...submission
+          })
+        });
+      } catch (err) {
+        console.error("Gửi dữ liệu lên Sheets thất bại:", err);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+
     setStage('result');
   };
 
@@ -217,7 +236,7 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
               <button 
                 key={idx}
                 onClick={() => handleSelectOption(idx)}
-                className="group flex items-center gap-4 p-5 rounded-2xl border-2 border-slate-100 hover:border-indigo-600 hover:bg-indigo-50 transition-all text-left shadow-sm hover:shadow-md"
+                className="group flex items-center gap-4 p-5 rounded-2xl border-2 border-slate-50 hover:border-indigo-600 hover:bg-indigo-50 transition-all text-left shadow-sm hover:shadow-md"
               >
                 <span className="w-12 h-12 rounded-xl bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center font-black text-xl transition-all shadow-inner">
                   {String.fromCharCode(65 + idx)}
@@ -247,6 +266,11 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
 
     return (
       <div className="max-w-2xl mx-auto space-y-8 mt-6">
+        {isSyncing && (
+          <div className="bg-emerald-600 text-white p-3 rounded-2xl text-center text-xs font-black animate-pulse flex items-center justify-center gap-2">
+             <span>Đang tự động đồng bộ lên Google Sheets...</span>
+          </div>
+        )}
         <div className="bg-white p-12 rounded-[4rem] shadow-2xl text-center border-t-[12px] border-indigo-600 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
             <svg className="w-40 h-40" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>

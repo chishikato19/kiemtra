@@ -22,7 +22,8 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
     shuffleQuestions: true,
     scoreType: ScoreType.EVEN,
     totalScore: 10,
-    questions: []
+    questions: [],
+    webhookUrl: ''
   });
 
   useEffect(() => {
@@ -31,7 +32,6 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
     }
   }, [quizToEdit]);
 
-  // Tự động tính lại điểm khi thay đổi số câu hỏi hoặc tổng điểm trong chế độ EVEN
   useEffect(() => {
     if (formData.scoreType === ScoreType.EVEN && formData.questions?.length) {
       const questionsCount = formData.questions.length;
@@ -39,13 +39,11 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
       
       const updatedQuestions = formData.questions.map((q, idx) => ({
         ...q,
-        // Câu cuối gánh phần dư để tổng khớp chính xác
         points: idx === questionsCount - 1 
           ? parseFloat((formData.totalScore! - (pointPerQuestion * (questionsCount - 1))).toFixed(2))
           : pointPerQuestion
       }));
       
-      // Chỉ cập nhật nếu có sự thay đổi thực sự để tránh loop vô tận
       const hasChanged = JSON.stringify(updatedQuestions.map(q => q.points)) !== JSON.stringify(formData.questions.map(q => q.points));
       if (hasChanged) {
         setFormData(prev => ({ ...prev, questions: updatedQuestions }));
@@ -99,7 +97,6 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
       return;
     }
     
-    // Nếu là thủ công, tính lại tổng điểm
     let finalTotalScore = formData.totalScore || 10;
     if (formData.scoreType === ScoreType.MANUAL) {
       finalTotalScore = formData.questions.reduce((acc, q) => acc + (q.points || 0), 0);
@@ -185,6 +182,26 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
         </div>
       </div>
 
+      <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest flex items-center gap-2">
+            <span>📊 Kết nối Google Sheets</span>
+            <span className="bg-emerald-200 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full">Tự động</span>
+          </h4>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-3">Web App URL (Apps Script)</label>
+          <input 
+            type="url" 
+            value={formData.webhookUrl || ''} 
+            onChange={e => setFormData({...formData, webhookUrl: e.target.value})}
+            className="w-full border-2 p-4 rounded-2xl focus:border-emerald-600 outline-none transition-all font-bold bg-white"
+            placeholder="https://script.google.com/macros/s/.../exec"
+          />
+          <p className="text-[10px] text-emerald-700 italic px-3">Dữ liệu bài làm sẽ được đẩy thẳng lên Sheets khi học sinh nộp bài.</p>
+        </div>
+      </div>
+
       <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 space-y-6">
         <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest">Cấu hình điểm số</h4>
         <div className="grid md:grid-cols-2 gap-6">
@@ -214,13 +231,6 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
                 onChange={e => setFormData({...formData, totalScore: parseFloat(e.target.value) || 0})}
                 className="w-full border-2 p-3 rounded-xl focus:border-indigo-600 outline-none font-bold bg-white"
               />
-            </div>
-          )}
-          {formData.scoreType === ScoreType.MANUAL && (
-            <div className="flex items-center pt-6 px-4">
-              <div className="text-indigo-900 font-bold">
-                Tự động tính tổng: <span className="text-2xl font-black">{(formData.questions || []).reduce((acc, q) => acc + (q.points || 0), 0).toFixed(1)}</span>
-              </div>
             </div>
           )}
         </div>

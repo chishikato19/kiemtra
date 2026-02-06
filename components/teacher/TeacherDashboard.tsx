@@ -49,15 +49,67 @@ export const TeacherDashboard: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert("Đã sao chép đường dẫn!");
+    alert("Đã sao chép!");
   };
+
+  const appsScriptCode = `/**
+ * GOOGLE APPS SCRIPT: HỆ THỐNG LƯU TRỮ TỰ ĐỘNG QUIZMASTER
+ * Chức năng: Tự động tạo thư mục đề thi trên Drive và ghi kết quả vào Sheets
+ */
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getActiveSheet();
+    
+    // 1. Quản lý Thư mục trên Google Drive
+    var rootFolderName = "QuizMaster_Data";
+    var folder;
+    var folders = DriveApp.getFoldersByName(rootFolderName);
+    
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder(rootFolderName);
+    }
+    
+    // Tạo thư mục con cho từng Đề thi + Lớp để lưu trữ riêng biệt
+    var quizFolderName = data.quizTitle + "_" + data.studentClass;
+    var quizFolder;
+    var quizFolders = folder.getFoldersByName(quizFolderName);
+    
+    if (quizFolders.hasNext()) {
+      quizFolder = quizFolders.next();
+    } else {
+      quizFolder = folder.createFolder(quizFolderName);
+    }
+    
+    // 2. Ghi dữ liệu vào Google Sheets
+    // Thứ tự: Thời gian nộp, Đề thi, Họ tên, Lớp, Điểm, Tổng câu, Thời gian làm(s), Link thư mục lưu trữ
+    sheet.appendRow([
+      data.timestamp,
+      data.quizTitle,
+      data.studentName,
+      data.studentClass,
+      data.score,
+      data.totalQuestions,
+      data.timeTaken,
+      quizFolder.getUrl()
+    ]);
+    
+    return ContentService.createTextOutput("OK - Dữ liệu đã được lưu vào thư mục: " + quizFolderName);
+  } catch (err) {
+    return ContentService.createTextOutput("Error: " + err.toString());
+  }
+}`;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800">Bảng điều khiển</h2>
-          <p className="text-slate-500 font-medium">Phiên bản Evolution Edition v2.5</p>
+          <p className="text-slate-500 font-medium">Phiên bản Cloud Archiver v2.6</p>
         </div>
         <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
           <button 
@@ -76,7 +128,7 @@ export const TeacherDashboard: React.FC = () => {
             onClick={() => setShowHelp(true)}
             className="px-4 py-2 rounded-xl font-bold text-emerald-600 hover:bg-emerald-50 text-sm flex items-center gap-1"
           >
-            📊 HD Google Sheets
+            📁 Cấu hình Google Drive
           </button>
         </div>
       </div>
@@ -166,63 +218,72 @@ export const TeacherDashboard: React.FC = () => {
         <QuizStatsView quizId={selectedQuizId} onBack={() => setActiveTab('list')} />
       )}
 
-      {/* Modal Hướng dẫn Google Sheets */}
       {showHelp && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden fade-in flex flex-col max-h-[90vh]">
-            <div className="p-8 bg-emerald-600 text-white flex justify-between items-center">
+          <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden fade-in flex flex-col max-h-[90vh]">
+            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black uppercase tracking-tight">Hướng dẫn Google Sheets</h3>
-                <p className="opacity-80 text-sm font-medium">Đưa dữ liệu trắc nghiệm lên bảng tính chuyên nghiệp</p>
+                <h3 className="text-2xl font-black uppercase tracking-tight">📁 Giải pháp Lưu trữ Google Drive</h3>
+                <p className="opacity-80 text-sm font-medium">Tự động tổ chức Thư mục & Bài làm chuyên nghiệp</p>
               </div>
               <button onClick={() => setShowHelp(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/40 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-              <section className="space-y-3">
+            <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
+              <div className="bg-indigo-50 border-l-4 border-indigo-500 p-6 rounded-r-3xl">
+                <p className="text-indigo-900 font-bold mb-2 uppercase text-xs tracking-widest">Dữ liệu được lưu ở đâu?</p>
+                <p className="text-sm text-indigo-700 leading-relaxed">
+                  Hiện tại, <b>Đề thi và Hình ảnh</b> đang được lưu dưới dạng Base64 ngay trong LocalStorage trình duyệt của bạn. Để đảm bảo an toàn và tổ chức tốt hơn, hãy dùng <b>Apps Script</b> dưới đây để tự động tạo thư mục trên Google Drive mỗi khi có học sinh nộp bài.
+                </p>
+              </div>
+
+              <section className="space-y-4">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">1</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách đơn giản: Xuất file CSV</h4>
+                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Mã Apps Script Nâng Cấp (Copy & Paste)</h4>
+                </div>
+                <div className="ml-11 text-slate-600 space-y-3 text-sm leading-relaxed">
+                  <p>Mã này sẽ tự động tạo thư mục <b>QuizMaster_Data</b> và các thư mục con cho từng đề thi ngay trên Drive của bạn:</p>
+                  
+                  <div className="relative group">
+                    <pre className="bg-slate-900 text-emerald-400 p-6 rounded-2xl overflow-x-auto text-[11px] font-mono leading-relaxed shadow-inner">
+                      {appsScriptCode}
+                    </pre>
+                    <button 
+                      onClick={() => copyToClipboard(appsScriptCode)}
+                      className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all"
+                    >
+                      Sao chép mã mới
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">2</span>
+                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách kiểm tra</h4>
                 </div>
                 <div className="ml-11 text-slate-600 space-y-2 text-sm leading-relaxed">
-                  <p>Đây là cách nhanh nhất để lấy điểm học sinh về máy tính:</p>
-                  <ul className="list-disc ml-4 space-y-1 font-medium">
-                    <li>Vào mục <b>Thống kê</b> của một đề thi cụ thể.</li>
-                    <li>Nhấn nút <b>"Xuất CSV"</b> để tải file dữ liệu về máy.</li>
-                    <li>Mở <a href="https://sheets.new" target="_blank" className="text-emerald-600 underline">Google Sheets</a>, vào <b>Tệp > Nhập > Tải lên</b> và chọn file vừa tải.</li>
-                    <li>Google Sheets sẽ tự động chia cột: Tên, Lớp, Điểm, Thời gian...</li>
+                  <ul className="list-disc ml-4 space-y-2 font-medium">
+                    <li>Sau khi dán mã, hãy nhấn <b>Triển khai mới (New Deployment)</b>.</li>
+                    <li>Cấp quyền cho Apps Script truy cập vào <b>Google Drive</b>.</li>
+                    <li>Copy URL mới và cập nhật vào ô Web App URL trong đề thi.</li>
+                    <li>Khi học sinh nộp bài, hãy kiểm tra Google Drive, bạn sẽ thấy thư mục <b>QuizMaster_Data</b> tự động xuất hiện.</li>
                   </ul>
                 </div>
               </section>
 
-              <section className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">2</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách nâng cao: Dùng Apps Script</h4>
+              <div className="bg-rose-50 p-6 rounded-[2rem] border border-rose-100 flex gap-4">
+                <div className="text-2xl">⚠️</div>
+                <div className="text-xs text-rose-800 font-medium leading-relaxed">
+                  <b>Lưu ý về hình ảnh:</b> Hình ảnh đề thi vẫn được nhúng trong chuỗi dữ liệu gửi đi. Trong phiên bản tới, hệ thống sẽ hỗ trợ bóc tách ảnh Base64 để lưu thành file ảnh thực tế (.jpg/.png) riêng biệt trong thư mục Drive đã tạo.
                 </div>
-                <div className="ml-11 text-slate-600 space-y-3 text-sm leading-relaxed">
-                  <p>Nếu bạn muốn dữ liệu tự động đổ về Sheets mỗi khi học sinh nộp bài (cần có server trung gian), bạn có thể thiết lập như sau:</p>
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 font-mono text-[11px] leading-tight">
-                    <p className="text-indigo-600 mb-2">// Ví dụ mã script cho Google Apps Script:</p>
-                    <p>function doPost(e) &#123;</p>
-                    <p>&nbsp;&nbsp;var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();</p>
-                    <p>&nbsp;&nbsp;var data = JSON.parse(e.postData.contents);</p>
-                    <p>&nbsp;&nbsp;sheet.appendRow([new Date(), data.studentName, data.studentClass, data.score]);</p>
-                    <p>&nbsp;&nbsp;return ContentService.createTextOutput("Success");</p>
-                    <p>&#125;</p>
-                  </div>
-                  <p className="font-medium">Lưu ý: Tính năng kết nối Webhook tự động sẽ được cập nhật trong phiên bản v3.0 tới.</p>
-                </div>
-              </section>
-
-              <section className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
-                <h4 className="font-black text-indigo-900 uppercase text-xs mb-2">Mẹo quản lý</h4>
-                <p className="text-indigo-700/80 text-xs italic">Sử dụng hàm <code>=VLOOKUP</code> trong Google Sheets để đối chiếu điểm số với danh sách lớp chính thức của bạn một cách tự động.</p>
-              </section>
+              </div>
             </div>
             <div className="p-6 bg-slate-50 border-t flex justify-center">
-              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:bg-emerald-700 transition-all uppercase text-xs">Đã rõ, cảm ơn!</button>
+              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all uppercase text-xs">Hoàn tất cài đặt</button>
             </div>
           </div>
         </div>
@@ -230,7 +291,7 @@ export const TeacherDashboard: React.FC = () => {
 
       {shareModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden fade-in border-t-[10px] border-indigo-600">
+          <div className="bg-white w-full max-sm:w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden fade-in border-t-[10px] border-indigo-600">
             <div className="p-8 text-center space-y-6">
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Chia sẻ đề thi</h3>

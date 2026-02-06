@@ -24,7 +24,7 @@ export interface Question {
   text: string; 
   options: string[];
   correctAnswer: number; 
-  points: number; // Điểm số cho từng câu hỏi
+  points: number; 
 }
 
 export interface Quiz {
@@ -35,11 +35,12 @@ export interface Quiz {
   practiceType?: PracticeType;
   questions: Question[];
   createdAt: number;
-  timeLimit?: number; // Phút, 0 là không giới hạn
+  timeLimit?: number; 
   shuffleQuestions?: boolean;
-  isLocked?: boolean; // Khóa/Mở khóa đề thi
-  scoreType: ScoreType; // Kiểu tính điểm
-  totalScore: number; // Tổng điểm kỳ vọng (thường là 10 hoặc 100)
+  isLocked?: boolean; 
+  scoreType: ScoreType; 
+  totalScore: number; 
+  webhookUrl?: string; // Link Apps Script để đẩy dữ liệu lên Google Sheets tự động
 }
 
 export interface StudentSubmission {
