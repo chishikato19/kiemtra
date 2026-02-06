@@ -15,6 +15,27 @@ export const storageService = {
     return storageService.getQuizzes().find(q => q.id === id);
   },
 
+  async getQuizFromCloud(quizId: string): Promise<Quiz | null> {
+    const config = this.getAppConfig();
+    if (!config.globalWebhookUrl) return null;
+
+    try {
+      // Gọi Apps Script với tham số action=getQuiz
+      const url = `${config.globalWebhookUrl}?action=getQuiz&quizId=${quizId}`;
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      if (result && result.id) {
+        // Lưu lại vào máy cục bộ để lần sau không cần load nữa
+        this.saveQuiz(result);
+        return result;
+      }
+    } catch (err) {
+      console.error("Không thể tải đề từ Cloud:", err);
+    }
+    return null;
+  },
+
   saveQuiz: (quiz: Quiz) => {
     const quizzes = storageService.getQuizzes();
     const index = quizzes.findIndex(q => q.id === quiz.id);
