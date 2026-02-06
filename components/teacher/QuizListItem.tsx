@@ -8,13 +8,14 @@ interface QuizListItemProps {
   syncingId: string | null;
   onSync: (q: Quiz) => void;
   onStats: (id: string) => void;
+  onEdit: (q: Quiz) => void;
   onShare: (q: Quiz) => void;
   onDelete: (id: string) => void;
   onMove: (quizId: string, folderId: string | undefined) => void;
 }
 
 export const QuizListItem: React.FC<QuizListItemProps> = ({ 
-  quiz, folders, syncingId, onSync, onStats, onShare, onDelete, onMove 
+  quiz, folders, syncingId, onSync, onStats, onEdit, onShare, onDelete, onMove 
 }) => {
   const q = quiz;
   return (
@@ -48,6 +49,12 @@ export const QuizListItem: React.FC<QuizListItemProps> = ({
           disabled={syncingId === q.id}
         >
           {syncingId === q.id ? 'Đang lưu...' : '☁️ Cloud'}
+        </button>
+        <button 
+          onClick={() => onEdit(q)}
+          className="px-5 py-3 bg-amber-50 text-amber-600 rounded-2xl font-black hover:bg-amber-100 uppercase text-[10px] tracking-widest"
+        >
+          ✏️ Sửa
         </button>
         <button 
           onClick={() => onStats(q.id)}
