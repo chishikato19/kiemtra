@@ -41,6 +41,7 @@ export const TeacherDashboard: React.FC = () => {
 
     setSyncingId(quiz.id);
     try {
+      // Sử dụng POST để lưu đề
       await fetch(appConfig.globalWebhookUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -50,7 +51,7 @@ export const TeacherDashboard: React.FC = () => {
           quiz: quiz
         })
       });
-      alert(`Đã đồng bộ đề "${quiz.title}" lên Cloud thành công! Bây giờ bạn có thể chia sẻ link cho bất kỳ ai.`);
+      alert(`Đã đồng bộ đề "${quiz.title}" lên Cloud! Link chia sẻ bây giờ đã bao gồm cấu hình Cloud của bạn.`);
     } catch (err) {
       alert("Lỗi đồng bộ: " + err);
     } finally {
@@ -79,7 +80,9 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const openShareModal = (quiz: Quiz) => {
-    const url = `${window.location.origin}${window.location.pathname}#/quiz/${quiz.id}`;
+    // Nhúng Webhook URL vào link chia sẻ (Mã hóa Base64 để tránh lỗi ký tự đặc biệt)
+    const encodedW = btoa(appConfig.globalWebhookUrl).replace(/=/g, '');
+    const url = `${window.location.origin}${window.location.pathname}#/quiz/${quiz.id}?w=${encodedW}`;
     setShareModal({ isOpen: true, url, title: quiz.title, id: quiz.id });
   };
 
@@ -90,7 +93,7 @@ export const TeacherDashboard: React.FC = () => {
 
   const appsScriptCode = `/**
  * GOOGLE APPS SCRIPT: HỆ THỐNG CLOUD QUIZMASTER PRO
- * Phiên bản: 3.0 (Hỗ trợ Lưu Đề, Tải Đề, Lưu Kết Quả)
+ * Phiên bản: 3.1 (Hỗ trợ Đồng bộ Đề thi xuyên thiết bị)
  */
 
 function doPost(e) {
@@ -105,16 +108,21 @@ function doPost(e) {
         quizSheet.appendRow(["ID", "DataJSON", "CreatedAt"]);
       }
       
-      // Xóa bản cũ nếu có để cập nhật
       var rows = quizSheet.getDataRange().getValues();
+      var foundIndex = -1;
       for (var i = 1; i < rows.length; i++) {
         if (rows[i][0] === data.quiz.id) {
-          quizSheet.deleteRow(i + 1);
+          foundIndex = i + 1;
           break;
         }
       }
       
-      quizSheet.appendRow([data.quiz.id, JSON.stringify(data.quiz), new Date()]);
+      if (foundIndex > -1) {
+        quizSheet.getRange(foundIndex, 2).setValue(JSON.stringify(data.quiz));
+        quizSheet.getRange(foundIndex, 3).setValue(new Date());
+      } else {
+        quizSheet.appendRow([data.quiz.id, JSON.stringify(data.quiz), new Date()]);
+      }
       return ContentService.createTextOutput("QUIZ_SAVED");
     }
     
@@ -147,7 +155,7 @@ function doGet(e) {
   if (action === "getQuiz") {
     var quizId = e.parameter.quizId;
     var quizSheet = ss.getSheetByName("CLOUD_QUIZZES");
-    if (!quizSheet) return ContentService.createTextOutput("[]").setMimeType(ContentService.MimeType.JSON);
+    if (!quizSheet) return ContentService.createTextOutput("NOT_FOUND");
     
     var rows = quizSheet.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
@@ -164,7 +172,7 @@ function doGet(e) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800">Bảng điều khiển</h2>
-          <p className="text-slate-500 font-medium">Phiên bản Cloud Sync v3.0</p>
+          <p className="text-slate-500 font-medium">Phiên bản Smart Link v3.1</p>
         </div>
         <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
           <button 
@@ -284,7 +292,7 @@ function doGet(e) {
         <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in">
           <div className="space-y-2">
             <h3 className="text-2xl font-black text-emerald-600 uppercase tracking-tight">Cấu hình Hệ thống Cloud</h3>
-            <p className="text-slate-500 font-medium">Bạn cần cập nhật Apps Script lên phiên bản 3.0 để hỗ trợ tải đề thi xuyên trình duyệt.</p>
+            <p className="text-slate-500 font-medium">Link Webhook này giúp học sinh có thể tải đề thi từ bất kỳ máy tính nào.</p>
           </div>
 
           <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 space-y-6">
@@ -297,15 +305,6 @@ function doGet(e) {
                 className="w-full border-2 p-4 rounded-2xl focus:border-emerald-600 outline-none transition-all font-bold bg-white"
                 placeholder="https://script.google.com/macros/s/.../exec"
               />
-            </div>
-            
-            <div className="pt-4 border-t border-emerald-100">
-               <button 
-                onClick={() => setShowHelp(true)}
-                className="text-xs font-black text-emerald-600 underline hover:text-emerald-800"
-               >
-                 Lấy mã Apps Script v3.0 (Quan trọng!)
-               </button>
             </div>
           </div>
 
@@ -337,67 +336,6 @@ function doGet(e) {
         <QuizStatsView quizId={selectedQuizId} onBack={() => setActiveTab('list')} />
       )}
 
-      {showHelp && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden fade-in flex flex-col max-h-[90vh]">
-            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-black uppercase tracking-tight">🚀 Apps Script v3.0: Cloud Sync</h3>
-                <p className="opacity-80 text-sm font-medium">Học sinh có thể thi ở bất kỳ đâu, bất kỳ máy nào</p>
-              </div>
-              <button onClick={() => setShowHelp(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/40 transition-colors">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
-              <div className="bg-amber-50 border-l-4 border-amber-500 p-6 rounded-r-3xl">
-                <p className="text-amber-900 font-bold mb-2 uppercase text-xs tracking-widest">Tại sao phải cập nhật?</p>
-                <p className="text-sm text-amber-700 leading-relaxed">
-                  Phiên bản này hỗ trợ <b>Lưu trữ đề thi trực tiếp lên Sheet</b>. Nếu không cập nhật, học sinh sẽ nhận báo lỗi "Đề không tồn tại" vì máy của họ không có dữ liệu đề thi mà bạn đã tạo.
-                </p>
-              </div>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">1</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Mã Apps Script v3.0</h4>
-                </div>
-                <div className="ml-11 text-slate-600 space-y-3 text-sm leading-relaxed">
-                  <div className="relative group">
-                    <pre className="bg-slate-900 text-emerald-400 p-6 rounded-2xl overflow-x-auto text-[11px] font-mono leading-relaxed shadow-inner">
-                      {appsScriptCode}
-                    </pre>
-                    <button 
-                      onClick={() => copyToClipboard(appsScriptCode)}
-                      className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all"
-                    >
-                      Sao chép mã
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">2</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Lưu ý quan trọng sau khi dán mã</h4>
-                </div>
-                <div className="ml-11 text-slate-600 space-y-2 text-sm leading-relaxed">
-                  <ul className="list-disc ml-4 space-y-2 font-medium">
-                    <li>Nhấn <b>Triển khai (Deploy) - Triển khai mới</b>.</li>
-                    <li>Sau khi cập nhật link vào App, hãy nhấn nút <b>☁️ Đồng bộ Cloud</b> cho từng đề thi.</li>
-                    <li>Khi nút chuyển sang màu xanh lá cây, đề thi đã sẵn sàng để học sinh truy cập.</li>
-                  </ul>
-                </div>
-              </section>
-            </div>
-            <div className="p-6 bg-slate-50 border-t flex justify-center">
-              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all uppercase text-xs">Đã hiểu quy trình</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {shareModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-sm:w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden fade-in border-t-[10px] border-indigo-600">
@@ -416,8 +354,8 @@ function doGet(e) {
               </div>
 
               <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                <p className="text-[9px] text-amber-700 font-bold uppercase">Mẹo nhỏ</p>
-                <p className="text-[10px] text-amber-600">Hãy đảm bảo bạn đã nhấn nút "Đồng bộ Cloud" trước khi gửi link này!</p>
+                <p className="text-[9px] text-amber-700 font-bold uppercase">Lưu ý</p>
+                <p className="text-[10px] text-amber-600">Link này chứa sẵn cấu hình Cloud của bạn để học sinh máy khác tự động nhận diện.</p>
               </div>
 
               <div className="flex gap-2">
