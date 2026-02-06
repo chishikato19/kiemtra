@@ -22,8 +22,7 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
     shuffleQuestions: true,
     scoreType: ScoreType.EVEN,
     totalScore: 10,
-    questions: [],
-    webhookUrl: ''
+    questions: []
   });
 
   useEffect(() => {
@@ -119,7 +118,7 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
         <h3 className="text-2xl font-black text-indigo-600 tracking-tight">
           {quizToEdit ? 'CHỈNH SỬA ĐỀ THI' : 'THIẾT LẬP ĐỀ THI MỚI'}
         </h3>
-        <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase">v2.5 Config</div>
+        <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase">v2.7 Cloud Arch</div>
       </div>
       
       <div className="grid md:grid-cols-2 gap-8">
@@ -179,26 +178,6 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
             />
             <label htmlFor="shuffle-toggle" className="ml-3 font-bold text-slate-600 cursor-pointer">Kích hoạt xáo trộn</label>
           </div>
-        </div>
-      </div>
-
-      <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest flex items-center gap-2">
-            <span>📊 Kết nối Google Sheets</span>
-            <span className="bg-emerald-200 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full">Tự động</span>
-          </h4>
-        </div>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-3">Web App URL (Apps Script)</label>
-          <input 
-            type="url" 
-            value={formData.webhookUrl || ''} 
-            onChange={e => setFormData({...formData, webhookUrl: e.target.value})}
-            className="w-full border-2 p-4 rounded-2xl focus:border-emerald-600 outline-none transition-all font-bold bg-white"
-            placeholder="https://script.google.com/macros/s/.../exec"
-          />
-          <p className="text-[10px] text-emerald-700 italic px-3">Dữ liệu bài làm sẽ được đẩy thẳng lên Sheets khi học sinh nộp bài.</p>
         </div>
       </div>
 

@@ -114,13 +114,14 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     
     storageService.saveSubmission(submission);
 
-    // Tự động đẩy lên Google Sheets nếu có Webhook
-    if (quiz.webhookUrl) {
+    // Lấy Link Webhook toàn cục
+    const config = storageService.getAppConfig();
+    if (config.globalWebhookUrl) {
       setIsSyncing(true);
       try {
-        await fetch(quiz.webhookUrl, {
+        await fetch(config.globalWebhookUrl, {
           method: 'POST',
-          mode: 'no-cors', // Cần thiết cho Apps Script Web App
+          mode: 'no-cors', 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             timestamp: new Date().toLocaleString('vi-VN'),
