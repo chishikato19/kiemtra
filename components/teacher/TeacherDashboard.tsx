@@ -384,7 +384,7 @@ function doGet(e) {
                 </div>
                 <div className="ml-11 text-slate-600 space-y-2 text-sm leading-relaxed">
                   <ul className="list-disc ml-4 space-y-2 font-medium">
-                    <li>Nhấn <b>Triển khai (Deploy) > Triển khai mới</b>.</li>
+                    <li>Nhấn <b>Triển khai (Deploy) - Triển khai mới</b>.</li>
                     <li>Sau khi cập nhật link vào App, hãy nhấn nút <b>☁️ Đồng bộ Cloud</b> cho từng đề thi.</li>
                     <li>Khi nút chuyển sang màu xanh lá cây, đề thi đã sẵn sàng để học sinh truy cập.</li>
                   </ul>
