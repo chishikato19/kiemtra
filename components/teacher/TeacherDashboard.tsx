@@ -46,6 +46,11 @@ export const TeacherDashboard: React.FC = () => {
     setShareModal({ isOpen: true, url, title: quiz.title, id: quiz.id });
   };
 
+  const handleEditQuiz = (quiz: Quiz) => {
+    setQuizToEdit(quiz);
+    setActiveTab('edit');
+  };
+
   const filteredQuizzes = quizzes.filter(q => currentFolderId ? q.folderId === currentFolderId : !q.folderId);
 
   return (
@@ -60,8 +65,8 @@ export const TeacherDashboard: React.FC = () => {
           </div>
         </div>
         <div className="flex bg-white p-1.5 rounded-2xl border shadow-sm items-center">
-          <button onClick={() => setActiveTab('list')} className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}>Danh sách</button>
-          <button onClick={() => setActiveTab('create')} className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'create' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}>+ Tạo đề</button>
+          <button onClick={() => { setQuizToEdit(undefined); setActiveTab('list'); }} className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}>Danh sách</button>
+          <button onClick={() => { setQuizToEdit(undefined); setActiveTab('create'); }} className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'create' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}>+ Tạo đề</button>
           <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'config' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-600'}`}>⚙️ Cloud</button>
         </div>
       </div>
@@ -108,7 +113,9 @@ export const TeacherDashboard: React.FC = () => {
             ) : filteredQuizzes.map(q => (
               <QuizListItem 
                 key={q.id} quiz={q} folders={folders} syncingId={syncingId} 
-                onSync={syncQuizToCloud} onStats={(id) => { setSelectedQuizId(id); setActiveTab('stats'); }} 
+                onSync={syncQuizToCloud} 
+                onStats={(id) => { setSelectedQuizId(id); setActiveTab('stats'); }} 
+                onEdit={handleEditQuiz}
                 onShare={openShareModal} onDelete={(id) => { storageService.deleteQuiz(id); setQuizzes(storageService.getQuizzes()); }}
                 onMove={(qid, fid) => { const quiz = storageService.getQuizById(qid); if(quiz) storageService.saveQuiz({...quiz, folderId: fid}); setQuizzes(storageService.getQuizzes()); }}
               />
@@ -148,11 +155,11 @@ export const TeacherDashboard: React.FC = () => {
       )}
 
       {activeTab === 'stats' && selectedQuizId && <QuizStatsView quizId={selectedQuizId} onBack={() => setActiveTab('list')} />}
-      {(activeTab === 'create' || activeTab === 'edit') && <QuizCreateForm quizToEdit={quizToEdit} onSuccess={() => setActiveTab('list')} />}
+      {(activeTab === 'create' || activeTab === 'edit') && <QuizCreateForm quizToEdit={quizToEdit} onSuccess={() => { setQuizToEdit(undefined); setActiveTab('list'); }} />}
 
       {shareModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-[300] backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white max-w-sm w-full rounded-[4rem] shadow-2xl p-10 text-center space-y-8 border-t-[12px] border-indigo-600 fade-in">
+          <div className="bg-white max-sm w-full rounded-[4rem] shadow-2xl p-10 text-center space-y-8 border-t-[12px] border-indigo-600 fade-in">
             <h3 className="text-2xl font-black uppercase leading-tight italic">{shareModal.title}</h3>
             <div className="bg-indigo-50 p-6 rounded-[3.5rem] border-2 border-dashed border-indigo-200 inline-block">
               <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareModal.url)}`} className="w-48 h-48 mx-auto mix-blend-multiply" alt="QR" />
