@@ -32,7 +32,7 @@ export const storageService = {
   },
 
   getQuizById: (id: string): Quiz | undefined => {
-    return storageService.getQuizzes().find(q => q.id === id);
+    return storageService.getQuizzes().find(q => String(q.id) === String(id));
   },
 
   async getQuizFromCloud(quizId: string): Promise<Quiz | null> {
@@ -67,7 +67,7 @@ export const storageService = {
       const localQuizzes = storageService.getQuizzes();
 
       for (const mq of cloudQuizzes) {
-        if (!localQuizzes.find(lq => lq.id === mq.id)) {
+        if (!localQuizzes.find(lq => String(lq.id) === String(mq.id))) {
            const fullQuiz = await storageService.getQuizFromCloud(mq.id);
            if (fullQuiz) count++;
         }
@@ -85,13 +85,17 @@ export const storageService = {
     try {
       const url = `${config.globalWebhookUrl}?action=getResults&quizId=${quizId}`;
       const response = await fetch(url);
+      if (!response.ok) throw new Error("Cloud response error");
+      
       const cloudResults: StudentSubmission[] = await response.json();
+      if (!Array.isArray(cloudResults)) return 0;
       
       const localSubmissions = storageService.getSubmissions();
       let newCount = 0;
       
       cloudResults.forEach(cs => {
-        if (!localSubmissions.find(ls => ls.id === cs.id)) {
+        // So khớp ID bài nộp để không lưu trùng
+        if (!localSubmissions.find(ls => String(ls.id) === String(cs.id))) {
           localSubmissions.push(cs);
           newCount++;
         }
@@ -107,15 +111,15 @@ export const storageService = {
 
   saveQuiz: (quiz: Quiz) => {
     const quizzes = storageService.getQuizzes();
-    const index = quizzes.findIndex(q => q.id === quiz.id);
+    const index = quizzes.findIndex(q => String(q.id) === String(quiz.id));
     if (index > -1) quizzes[index] = quiz;
     else quizzes.push(quiz);
     localStorage.setItem(KEY_QUIZZES, JSON.stringify(quizzes));
   },
 
   deleteQuiz: (id: string) => {
-    const quizzes = storageService.getQuizzes().filter(q => q.id !== id);
-    const submissions = storageService.getSubmissions().filter(s => s.quizId !== id);
+    const quizzes = storageService.getQuizzes().filter(q => String(q.id) !== String(id));
+    const submissions = storageService.getSubmissions().filter(s => String(s.quizId) !== String(id));
     localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(submissions));
     localStorage.setItem(KEY_QUIZZES, JSON.stringify(quizzes));
   },
@@ -123,7 +127,7 @@ export const storageService = {
   getSubmissions: (quizId?: string): StudentSubmission[] => {
     const data = localStorage.getItem(KEY_SUBMISSIONS);
     const all: StudentSubmission[] = data ? JSON.parse(data) : [];
-    return quizId ? all.filter(s => s.quizId === quizId) : all;
+    return quizId ? all.filter(s => String(s.quizId) === String(quizId)) : all;
   },
 
   saveSubmission: (submission: StudentSubmission) => {
