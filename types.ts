@@ -27,6 +27,10 @@ export interface Question {
   points: number; 
 }
 
+export interface AppConfig {
+  globalWebhookUrl: string; // Link duy nhất cho toàn bộ ứng dụng
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -40,7 +44,6 @@ export interface Quiz {
   isLocked?: boolean; 
   scoreType: ScoreType; 
   totalScore: number; 
-  webhookUrl?: string; // Link Apps Script để đẩy dữ liệu lên Google Sheets tự động
 }
 
 export interface StudentSubmission {

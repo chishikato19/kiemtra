@@ -1,8 +1,9 @@
 
-import { Quiz, QuizMode, PracticeType, StudentSubmission, ScoreType } from "../types";
+import { Quiz, QuizMode, PracticeType, StudentSubmission, ScoreType, AppConfig } from "../types";
 
 const KEY_QUIZZES = 'qm_quizzes';
 const KEY_SUBMISSIONS = 'qm_submissions';
+const KEY_CONFIG = 'qm_global_config';
 
 export const storageService = {
   getQuizzes: (): Quiz[] => {
@@ -24,7 +25,8 @@ export const storageService = {
 
   deleteQuiz: (id: string) => {
     const quizzes = storageService.getQuizzes().filter(q => q.id !== id);
-    localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(storageService.getSubmissions().filter(s => s.quizId !== id)));
+    const submissions = storageService.getSubmissions().filter(s => s.quizId !== id);
+    localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(submissions));
     localStorage.setItem(KEY_QUIZZES, JSON.stringify(quizzes));
   },
 
@@ -38,6 +40,15 @@ export const storageService = {
     const all = storageService.getSubmissions();
     all.push(submission);
     localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(all));
+  },
+
+  getAppConfig: (): AppConfig => {
+    const data = localStorage.getItem(KEY_CONFIG);
+    return data ? JSON.parse(data) : { globalWebhookUrl: '' };
+  },
+
+  saveAppConfig: (config: AppConfig) => {
+    localStorage.setItem(KEY_CONFIG, JSON.stringify(config));
   },
 
   seedSampleData: () => {

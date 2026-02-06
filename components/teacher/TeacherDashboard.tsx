@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { Quiz, QuizMode } from '../../types';
+import { Quiz, QuizMode, AppConfig } from '../../types';
 import { storageService } from '../../services/storageService';
 import { QuizCreateForm } from './QuizCreateForm';
 import { QuizStatsView } from './QuizStatsView';
 
 export const TeacherDashboard: React.FC = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'stats' | 'edit'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'stats' | 'edit' | 'config'>('list');
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [quizToEdit, setQuizToEdit] = useState<Quiz | undefined>(undefined);
   const [showHelp, setShowHelp] = useState(false);
+  const [appConfig, setAppConfig] = useState<AppConfig>({ globalWebhookUrl: '' });
   
   const [shareModal, setShareModal] = useState<{ isOpen: boolean, url: string, title: string }>({
     isOpen: false,
@@ -20,7 +21,14 @@ export const TeacherDashboard: React.FC = () => {
 
   useEffect(() => {
     setQuizzes(storageService.getQuizzes());
+    setAppConfig(storageService.getAppConfig());
   }, [activeTab]);
+
+  const handleSaveConfig = () => {
+    storageService.saveAppConfig(appConfig);
+    alert("Đã lưu cấu hình hệ thống!");
+    setActiveTab('list');
+  };
 
   const handleSeed = () => {
     if (storageService.seedSampleData()) {
@@ -53,8 +61,8 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const appsScriptCode = `/**
- * GOOGLE APPS SCRIPT: HỆ THỐNG LƯU TRỮ TỰ ĐỘNG QUIZMASTER
- * Chức năng: Tự động tạo thư mục đề thi trên Drive và ghi kết quả vào Sheets
+ * GOOGLE APPS SCRIPT: HỆ THỐNG LƯU TRỮ TỰ ĐỘNG QUIZMASTER (GLOBAL VERSION)
+ * Cài đặt: Một lần duy nhất cho toàn bộ App
  */
 
 function doPost(e) {
@@ -63,8 +71,8 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getActiveSheet();
     
-    // 1. Quản lý Thư mục trên Google Drive
-    var rootFolderName = "QuizMaster_Data";
+    // 1. Quản lý Thư mục gốc trên Google Drive
+    var rootFolderName = "QuizMaster_Central_Data";
     var folder;
     var folders = DriveApp.getFoldersByName(rootFolderName);
     
@@ -74,8 +82,8 @@ function doPost(e) {
       folder = DriveApp.createFolder(rootFolderName);
     }
     
-    // Tạo thư mục con cho từng Đề thi + Lớp để lưu trữ riêng biệt
-    var quizFolderName = data.quizTitle + "_" + data.studentClass;
+    // 2. Tạo thư mục con theo tên Đề thi + Lớp để phân loại
+    var quizFolderName = data.quizTitle + " - " + data.studentClass;
     var quizFolder;
     var quizFolders = folder.getFoldersByName(quizFolderName);
     
@@ -85,8 +93,7 @@ function doPost(e) {
       quizFolder = folder.createFolder(quizFolderName);
     }
     
-    // 2. Ghi dữ liệu vào Google Sheets
-    // Thứ tự: Thời gian nộp, Đề thi, Họ tên, Lớp, Điểm, Tổng câu, Thời gian làm(s), Link thư mục lưu trữ
+    // 3. Ghi dữ liệu vào Google Sheets
     sheet.appendRow([
       data.timestamp,
       data.quizTitle,
@@ -95,12 +102,12 @@ function doPost(e) {
       data.score,
       data.totalQuestions,
       data.timeTaken,
-      quizFolder.getUrl()
+      quizFolder.getUrl() // Link thư mục riêng của đề này
     ]);
     
-    return ContentService.createTextOutput("OK - Dữ liệu đã được lưu vào thư mục: " + quizFolderName);
+    return ContentService.createTextOutput("SUCCESS").setMimeType(ContentService.MimeType.TEXT);
   } catch (err) {
-    return ContentService.createTextOutput("Error: " + err.toString());
+    return ContentService.createTextOutput("ERROR: " + err.toString()).setMimeType(ContentService.MimeType.TEXT);
   }
 }`;
 
@@ -109,7 +116,7 @@ function doPost(e) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800">Bảng điều khiển</h2>
-          <p className="text-slate-500 font-medium">Phiên bản Cloud Archiver v2.6</p>
+          <p className="text-slate-500 font-medium">Phiên bản Centralized v2.7</p>
         </div>
         <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
           <button 
@@ -125,16 +132,26 @@ function doPost(e) {
             + Tạo đề mới
           </button>
           <button 
-            onClick={() => setShowHelp(true)}
-            className="px-4 py-2 rounded-xl font-bold text-emerald-600 hover:bg-emerald-50 text-sm flex items-center gap-1"
+            onClick={() => setActiveTab('config')}
+            className={`px-4 py-2 rounded-xl font-bold transition-all text-sm flex items-center gap-1 ${activeTab === 'config' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-600 hover:bg-emerald-50'}`}
           >
-            📁 Cấu hình Google Drive
+            ⚙️ Cấu hình Cloud
           </button>
         </div>
       </div>
 
       {activeTab === 'list' && (
         <div className="space-y-4">
+          {!appConfig.globalWebhookUrl && (
+            <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl flex items-center justify-between gap-4 animate-pulse">
+               <div className="flex items-center gap-3">
+                 <span className="text-2xl">⚡</span>
+                 <p className="text-sm font-bold text-amber-800">Bạn chưa cài đặt link Google Sheets. Kết quả thi sẽ không được lưu tự động!</p>
+               </div>
+               <button onClick={() => setActiveTab('config')} className="bg-amber-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase">Cài đặt ngay</button>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
              <button 
               onClick={handleSeed}
@@ -148,7 +165,7 @@ function doPost(e) {
             {quizzes.length === 0 ? (
               <div className="bg-white p-20 text-center rounded-[2rem] border-2 border-dashed border-slate-200">
                 <p className="text-slate-400 font-medium mb-4">Chưa có đề thi nào trong hệ thống.</p>
-                <button onClick={handleSeed} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Thử dữ liệu mẫu</button>
+                <button onClick={() => setActiveTab('create')} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Bắt đầu tạo đề đầu tiên</button>
               </div>
             ) : (
               quizzes.sort((a,b) => b.createdAt - a.createdAt).map(q => (
@@ -207,6 +224,53 @@ function doPost(e) {
         </div>
       )}
 
+      {activeTab === 'config' && (
+        <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in">
+          <div className="space-y-2">
+            <h3 className="text-2xl font-black text-emerald-600 uppercase tracking-tight">Cấu hình Hệ thống Cloud</h3>
+            <p className="text-slate-500 font-medium">Link Webhook này sẽ được dùng chung cho tất cả các đề thi trong ứng dụng.</p>
+          </div>
+
+          <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-3">Google Apps Script Web App URL</label>
+              <input 
+                type="url" 
+                value={appConfig.globalWebhookUrl} 
+                onChange={e => setAppConfig({...appConfig, globalWebhookUrl: e.target.value})}
+                className="w-full border-2 p-4 rounded-2xl focus:border-emerald-600 outline-none transition-all font-bold bg-white"
+                placeholder="https://script.google.com/macros/s/.../exec"
+              />
+              <p className="text-xs text-emerald-700 italic px-3 mt-2">Dữ liệu bài làm của mọi đề thi sẽ tự động đổ về bảng tính kết nối với URL này.</p>
+            </div>
+            
+            <div className="pt-4 border-t border-emerald-100">
+               <button 
+                onClick={() => setShowHelp(true)}
+                className="text-xs font-black text-emerald-600 underline hover:text-emerald-800"
+               >
+                 Xem hướng dẫn lấy mã Apps Script mới nhất
+               </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+             <button 
+              onClick={() => setActiveTab('list')}
+              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-[2rem] font-black uppercase tracking-widest text-xs"
+            >
+              Hủy
+            </button>
+            <button 
+              onClick={handleSaveConfig}
+              className="flex-[2] py-4 bg-emerald-600 text-white rounded-[2rem] font-black shadow-xl hover:bg-emerald-700 transition-all uppercase tracking-widest text-xs"
+            >
+              Lưu cấu hình toàn App
+            </button>
+          </div>
+        </div>
+      )}
+
       {(activeTab === 'create' || activeTab === 'edit') && (
         <QuizCreateForm 
           quizToEdit={quizToEdit} 
@@ -223,28 +287,21 @@ function doPost(e) {
           <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden fade-in flex flex-col max-h-[90vh]">
             <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black uppercase tracking-tight">📁 Giải pháp Lưu trữ Google Drive</h3>
-                <p className="opacity-80 text-sm font-medium">Tự động tổ chức Thư mục & Bài làm chuyên nghiệp</p>
+                <h3 className="text-2xl font-black uppercase tracking-tight">📁 Giải pháp Lưu trữ chung (Centralized)</h3>
+                <p className="opacity-80 text-sm font-medium">Một link duy nhất cho mọi đề thi - Tự động phân loại thư mục</p>
               </div>
               <button onClick={() => setShowHelp(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/40 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
-              <div className="bg-indigo-50 border-l-4 border-indigo-500 p-6 rounded-r-3xl">
-                <p className="text-indigo-900 font-bold mb-2 uppercase text-xs tracking-widest">Dữ liệu được lưu ở đâu?</p>
-                <p className="text-sm text-indigo-700 leading-relaxed">
-                  Hiện tại, <b>Đề thi và Hình ảnh</b> đang được lưu dưới dạng Base64 ngay trong LocalStorage trình duyệt của bạn. Để đảm bảo an toàn và tổ chức tốt hơn, hãy dùng <b>Apps Script</b> dưới đây để tự động tạo thư mục trên Google Drive mỗi khi có học sinh nộp bài.
-                </p>
-              </div>
-
               <section className="space-y-4">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">1</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Mã Apps Script Nâng Cấp (Copy & Paste)</h4>
+                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Mã Apps Script Toàn Cầu</h4>
                 </div>
                 <div className="ml-11 text-slate-600 space-y-3 text-sm leading-relaxed">
-                  <p>Mã này sẽ tự động tạo thư mục <b>QuizMaster_Data</b> và các thư mục con cho từng đề thi ngay trên Drive của bạn:</p>
+                  <p>Sử dụng mã này để tự động tạo một thư mục tổng <b>QuizMaster_Central_Data</b>. Bên trong nó sẽ tự sinh các thư mục con cho từng bài thi riêng biệt:</p>
                   
                   <div className="relative group">
                     <pre className="bg-slate-900 text-emerald-400 p-6 rounded-2xl overflow-x-auto text-[11px] font-mono leading-relaxed shadow-inner">
@@ -254,36 +311,21 @@ function doPost(e) {
                       onClick={() => copyToClipboard(appsScriptCode)}
                       className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all"
                     >
-                      Sao chép mã mới
+                      Sao chép mã
                     </button>
                   </div>
                 </div>
               </section>
 
-              <section className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">2</span>
-                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách kiểm tra</h4>
-                </div>
-                <div className="ml-11 text-slate-600 space-y-2 text-sm leading-relaxed">
-                  <ul className="list-disc ml-4 space-y-2 font-medium">
-                    <li>Sau khi dán mã, hãy nhấn <b>Triển khai mới (New Deployment)</b>.</li>
-                    <li>Cấp quyền cho Apps Script truy cập vào <b>Google Drive</b>.</li>
-                    <li>Copy URL mới và cập nhật vào ô Web App URL trong đề thi.</li>
-                    <li>Khi học sinh nộp bài, hãy kiểm tra Google Drive, bạn sẽ thấy thư mục <b>QuizMaster_Data</b> tự động xuất hiện.</li>
-                  </ul>
-                </div>
-              </section>
-
               <div className="bg-rose-50 p-6 rounded-[2rem] border border-rose-100 flex gap-4">
-                <div className="text-2xl">⚠️</div>
+                <div className="text-2xl">⚡</div>
                 <div className="text-xs text-rose-800 font-medium leading-relaxed">
-                  <b>Lưu ý về hình ảnh:</b> Hình ảnh đề thi vẫn được nhúng trong chuỗi dữ liệu gửi đi. Trong phiên bản tới, hệ thống sẽ hỗ trợ bóc tách ảnh Base64 để lưu thành file ảnh thực tế (.jpg/.png) riêng biệt trong thư mục Drive đã tạo.
+                  <b>Ưu điểm:</b> Bạn chỉ cần tạo một file Google Sheets duy nhất, dán mã này vào Apps Script, Deploy một lần và lấy Link dán vào "Cấu hình Cloud". Từ nay về sau, khi tạo bất kỳ đề thi nào mới, bạn không cần quan tâm đến URL này nữa.
                 </div>
               </div>
             </div>
             <div className="p-6 bg-slate-50 border-t flex justify-center">
-              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all uppercase text-xs">Hoàn tất cài đặt</button>
+              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all uppercase text-xs">Đã hiểu quy trình</button>
             </div>
           </div>
         </div>
