@@ -3,8 +3,7 @@ import { Question } from "../types";
 
 /**
  * Hàm bóc tách nội dung từ file Word (.docx)
- * Định dạng: "Câu X: ...", "A. ...", "B. ...", "C. ...", "D. ..."
- * Đáp án lấy từ "BẢNG ĐÁP ÁN" ở cuối file.
+ * Hỗ trợ các định dạng: "Câu X:", "Câu X.", "A.", "B.", "C.", "D."
  */
 export const parseWordFile = async (file: File): Promise<{questions: Question[], title: string}> => {
   return new Promise((resolve, reject) => {
@@ -12,43 +11,40 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
     reader.onload = async (e) => {
       const arrayBuffer = e.target?.result as ArrayBuffer;
       try {
-        // Chuyển đổi DOCX sang HTML để giữ lại <img> (base64) và các định dạng cơ bản
+        // Chuyển đổi DOCX sang HTML
         const result = await (window as any).mammoth.convertToHtml({ arrayBuffer });
         const html = result.value;
         
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const paragraphs = Array.from(doc.querySelectorAll('p, li, table'));
+        const paragraphs = Array.from(doc.querySelectorAll('p, li, tr, td'));
         
         let questions: Question[] = [];
         let currentQuestion: Partial<Question> | null = null;
         let answerTable: Record<number, number> = {};
 
-        // 1. Tìm bảng đáp án ở cuối văn bản trước
-        // Định dạng kỳ vọng: "BẢNG ĐÁP ÁN: 1.A 2.B 3.C..."
-        // Fix: Use textContent or cast doc.body to HTMLElement safely
+        // 1. Tìm bảng đáp án ở cuối văn bản
         const fullText = doc.body ? (doc.body as HTMLElement).innerText : "";
-        const tableHeaderIndex = fullText.lastIndexOf("BẢNG ĐÁP ÁN");
+        const tableHeaderIndex = fullText.search(/BẢNG ĐÁP ÁN|ĐÁP ÁN/i);
         if (tableHeaderIndex !== -1) {
           const tableText = fullText.substring(tableHeaderIndex);
-          const pairs = tableText.matchAll(/(\d+)[\s.-]+([A-D])/gi);
+          const pairs = tableText.matchAll(/(\d+)[\s.-]*([A-D])/gi);
           for (const match of pairs) {
             const qNum = parseInt(match[1]);
             const ansChar = match[2].toUpperCase();
-            answerTable[qNum] = ansChar.charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+            answerTable[qNum] = ansChar.charCodeAt(0) - 65; 
           }
         }
 
-        // 2. Duyệt qua các thành phần HTML để bóc tách Câu hỏi và Đáp án
+        // 2. Duyệt qua các thành phần HTML
         paragraphs.forEach((p) => {
-          // Fix: Cast p to HTMLElement to access innerText property
           const text = (p as HTMLElement).innerText.trim();
-          
-          // Kiểm tra xem có phải bắt đầu một câu hỏi mới không
-          const qMatch = text.match(/^Câu\s*(\d+)\s*[:.]/i);
+          if (!text) return;
+
+          // Nhận diện câu hỏi: "Câu 1:", "Câu 1.", "Câu 1 -"
+          const qMatch = text.match(/^(?:Câu|Câu hỏi|Question)\s*(\d+)\s*[:.-]/i);
           
           if (qMatch) {
-            // Lưu câu hỏi trước đó nếu có
             if (currentQuestion && currentQuestion.text && currentQuestion.options?.length === 4) {
               questions.push(currentQuestion as Question);
             }
@@ -56,18 +52,21 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
             const qNum = parseInt(qMatch[1]);
             currentQuestion = {
               id: `q-${Date.now()}-${questions.length}`,
-              text: p.innerHTML.replace(/^Câu\s*\d+\s*[:.]/i, '').trim(),
+              text: p.innerHTML.replace(/^(?:Câu|Câu hỏi|Question)\s*\d+\s*[:.-]/i, '').trim(),
               options: [],
-              correctAnswer: answerTable[qNum] ?? 0 // Mặc định là A nếu không tìm thấy trong bảng
+              correctAnswer: answerTable[qNum] ?? 0
             };
           } else if (currentQuestion) {
-            // Kiểm tra xem có phải là lựa chọn A, B, C, D không
-            const optMatch = text.match(/^([A-D])\s*[:.]\s*(.*)/i);
+            // Nhận diện lựa chọn: "A.", "B.", "C.", "D." hoặc "A:"...
+            const optMatch = text.match(/^([A-D])\s*[:.-]\s*(.*)/i);
             if (optMatch) {
-              currentQuestion.options?.push(optMatch[2] || p.innerHTML.replace(/^[A-D]\s*[:.]/i, '').trim());
-            } else if (text.length > 0 && !text.includes("BẢNG ĐÁP ÁN")) {
-              // Nếu là text bình thường hoặc ảnh, cộng dồn vào nội dung câu hỏi
-              currentQuestion.text += p.innerHTML;
+              const optText = optMatch[2] || p.innerHTML.replace(/^[A-D]\s*[:.-]/i, '').trim();
+              if (currentQuestion.options!.length < 4) {
+                currentQuestion.options!.push(optText);
+              }
+            } else if (!text.match(/BẢNG ĐÁP ÁN|ĐÁP ÁN/i)) {
+              // Nội dung bổ sung cho câu hỏi (hình ảnh, công thức giữa dòng)
+              currentQuestion.text += " " + p.innerHTML;
             }
           }
         });
@@ -78,7 +77,7 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
         }
 
         if (questions.length === 0) {
-          throw new Error("Không tìm thấy câu hỏi nào đúng định dạng (Câu X:, A., B., C., D.)");
+          throw new Error("Không tìm thấy câu hỏi nào. Hãy chắc chắn file Word có định dạng 'Câu 1: ...' và các đáp án 'A.', 'B.', 'C.', 'D.'");
         }
 
         resolve({
@@ -89,6 +88,7 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
         reject(err);
       }
     };
+    reader.onerror = () => reject(new Error("Không thể đọc file."));
     reader.readAsArrayBuffer(file);
   });
 };
