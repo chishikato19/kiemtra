@@ -1,20 +1,21 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Quiz, QuizMode, PracticeType, StudentSubmission, Question } from '../../types';
 import { storageService } from '../../services/storageService';
 
 export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [stage, setStage] = useState<'loading' | 'login' | 'running' | 'result'>('loading');
+  const [stage, setStage] = useState<'loading' | 'login' | 'running' | 'submitting' | 'result'>('loading');
   const [studentInfo, setStudentInfo] = useState({ name: '', class: '' });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<(number | null)[]>([]);
   const [startTime, setStartTime] = useState(0);
   const [feedback, setFeedback] = useState<'none' | 'correct' | 'wrong'>('none');
   const [timeLeft, setTimeLeft] = useState<number | null>(null); 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-
+  const [isSubmittingInternal, setIsSubmittingInternal] = useState(false);
+  
+  const hasSubmitted = useRef(false);
   const [shuffledQuestions, setShuffledQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
@@ -27,12 +28,32 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
 
       if (q) {
         setQuiz(q);
+        
+        // Logic xáo trộn: Cả câu hỏi và đáp án
+        let questionsToProcess = [...q.questions];
+        
+        // 1. Xáo trộn đáp án bên trong từng câu hỏi
+        const processedQuestions = questionsToProcess.map(question => {
+          // Tạo mảng các option kèm index gốc
+          const indexedOptions = question.options.map((text, idx) => ({ text, originalIdx: idx }));
+          // Xáo trộn options
+          const shuffledOptions = indexedOptions.sort(() => Math.random() - 0.5);
+          // Tìm index mới của đáp án đúng
+          const newCorrectAnswer = shuffledOptions.findIndex(o => o.originalIdx === question.correctAnswer);
+          
+          return {
+            ...question,
+            options: shuffledOptions.map(o => o.text),
+            correctAnswer: newCorrectAnswer
+          };
+        });
+
+        // 2. Xáo trộn thứ tự các câu hỏi (nếu cấu hình cho phép)
         if (q.shuffleQuestions) {
-          const shuffled = [...q.questions].sort(() => Math.random() - 0.5);
-          setShuffledQuestions(shuffled);
-        } else {
-          setShuffledQuestions(q.questions);
+          processedQuestions.sort(() => Math.random() - 0.5);
         }
+
+        setShuffledQuestions(processedQuestions);
         setUserAnswers(new Array(q.questions.length).fill(null));
         setStage('login');
       } else {
@@ -58,7 +79,20 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   if (stage === 'loading') return (
     <div className="flex flex-col items-center justify-center p-20 space-y-4">
       <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-      <p className="font-black text-indigo-600 uppercase tracking-widest text-[10px]">Đang tải đề thi từ Cloud Vault...</p>
+      <p className="font-black text-indigo-600 uppercase tracking-widest text-[10px]">Đang kết nối Cloud Vault...</p>
+    </div>
+  );
+
+  if (stage === 'submitting') return (
+    <div className="flex flex-col items-center justify-center p-20 space-y-6 fade-in">
+      <div className="relative w-20 h-20">
+        <div className="absolute inset-0 border-8 border-indigo-100 rounded-full"></div>
+        <div className="absolute inset-0 border-8 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+      <div className="text-center space-y-2">
+        <p className="font-black text-slate-800 uppercase tracking-tighter text-2xl italic">Đang nộp bài...</p>
+        <p className="text-slate-400 font-bold text-xs">Vui lòng không thoát trình duyệt, kết quả đang được lưu trữ an toàn.</p>
+      </div>
     </div>
   );
 
@@ -105,11 +139,17 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
       const updated = [...userAnswers];
       updated[currentIndex] = idx;
       setUserAnswers(updated);
-      // Ở chế độ thi, chọn xong không nhảy câu và không tự nộp bài
     }
   };
 
   const finalizeQuiz = async () => {
+    // Chặn nộp bài nhiều lần
+    if (hasSubmitted.current) return;
+    hasSubmitted.current = true;
+    
+    setIsSubmittingInternal(true);
+    setStage('submitting');
+
     const finalAnswers = userAnswers.map(a => a === null ? -1 : a);
     const totalAchievedScore = finalAnswers.reduce((acc, val, idx) => {
       const isCorrect = val === shuffledQuestions[idx].correctAnswer;
@@ -128,10 +168,11 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
       timeTaken: Math.floor((Date.now() - startTime) / 1000)
     };
     
+    // Lưu cục bộ trước
     storageService.saveSubmission(submission);
+    
     const config = storageService.getAppConfig();
     if (config.globalWebhookUrl) {
-      setIsSyncing(true);
       try {
         await fetch(config.globalWebhookUrl, {
           method: 'POST',
@@ -145,13 +186,16 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
           })
         });
       } catch (err) {
-        console.error("Gửi dữ liệu thất bại:", err);
-      } finally {
-        setIsSyncing(false);
+        console.error("Gửi dữ liệu Cloud thất bại:", err);
       }
     }
-    setStage('result');
-    setShowConfirmModal(false);
+
+    // Delay nhẹ để tạo cảm giác hệ thống đang xử lý thực sự
+    setTimeout(() => {
+      setStage('result');
+      setShowConfirmModal(false);
+      setIsSubmittingInternal(false);
+    }, 1200);
   };
 
   const formatTime = (seconds: number) => {
@@ -186,6 +230,10 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
           onChange={e => setStudentInfo({...studentInfo, class: e.target.value})}
         />
       </div>
+      <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+         <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">🔐 Bảo mật bài thi</p>
+         <p className="text-[11px] text-indigo-400 font-medium italic leading-tight">Thứ tự câu hỏi và đáp án đã được xáo trộn tự động cho mỗi học sinh.</p>
+      </div>
       <button onClick={startQuiz} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xl shadow-xl hover:bg-indigo-700 transition-all uppercase tracking-tighter">Bắt đầu làm bài</button>
     </div>
   );
@@ -196,7 +244,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
 
     return (
       <div className="max-w-5xl mx-auto grid lg:grid-cols-[1fr_300px] gap-6 mt-6 pb-20 fade-in">
-        {/* Vùng nội dung câu hỏi */}
         <div className="space-y-6">
           <div className="bg-white p-10 rounded-[3rem] shadow-xl border-2 border-transparent transition-all min-h-[450px] flex flex-col justify-between relative">
             {feedback !== 'none' && (
@@ -249,7 +296,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
           </div>
         </div>
 
-        {/* Bảng điều hướng & Thống kê */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 space-y-6 sticky top-24">
             <div className="text-center space-y-1 pb-4 border-b">
@@ -297,7 +343,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
           </div>
         </div>
 
-        {/* Hộp thoại xác nhận nộp bài */}
         {showConfirmModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
             <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 text-center space-y-6">
@@ -313,12 +358,14 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
               </div>
               <div className="flex flex-col gap-2">
                  <button 
+                  disabled={isSubmittingInternal}
                   onClick={finalizeQuiz}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl"
+                  className={`w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl transition-all ${isSubmittingInternal ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'}`}
                 >
-                  Xác nhận nộp bài
+                  {isSubmittingInternal ? 'Đang xử lý...' : 'Xác nhận nộp bài'}
                 </button>
                 <button 
+                  disabled={isSubmittingInternal}
                   onClick={() => setShowConfirmModal(false)}
                   className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs tracking-widest"
                 >
@@ -333,18 +380,14 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   }
 
   if (stage === 'result') {
-    const sub = storageService.getSubmissions(quizId).find(s => s.studentName === studentInfo.name) || { score: 0, timeTaken: 0 };
-    const rankings = storageService.getSubmissions(quizId)
+    const allResults = storageService.getSubmissions(quizId);
+    const sub = allResults.find(s => s.studentName === studentInfo.name) || { score: 0, timeTaken: 0 };
+    const rankings = allResults
       .sort((a,b) => b.score - a.score || a.timeTaken - b.timeTaken)
       .slice(0, 10);
 
     return (
       <div className="max-w-2xl mx-auto space-y-8 mt-6 fade-in">
-        {isSyncing && (
-          <div className="bg-emerald-600 text-white p-3 rounded-2xl text-center text-[10px] font-black animate-pulse uppercase tracking-widest">
-             ☁️ Đang đồng bộ kết quả lên Cloud Vault...
-          </div>
-        )}
         <div className="bg-white p-12 rounded-[4rem] shadow-2xl text-center border-t-[12px] border-indigo-600 relative overflow-hidden">
           <h2 className="text-4xl font-black text-slate-800 tracking-tighter uppercase italic">HOÀN THÀNH</h2>
           <div className="my-10 relative">
