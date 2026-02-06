@@ -2,24 +2,71 @@
 import React from 'react';
 
 export const AppsScriptGuide: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const scriptCode = `function doGet(e) {
+  const scriptCode = `// QuizMaster Pro - Apps Script Cloud Vault v4.5
+function doGet(e) {
   var action = e.parameter.action;
+  var props = PropertiesService.getScriptProperties();
+  
+  // 1. Lấy nội dung chi tiết một đề thi
   if (action == "getQuiz") {
-    var quizId = e.parameter.quizId;
-    var data = CacheService.getScriptCache().get("quiz_" + quizId);
-    return ContentService.createTextOutput(data).setMimeType(ContentService.MimeType.JSON);
+    var data = props.getProperty("quiz_" + e.parameter.quizId);
+    return ContentService.createTextOutput(data || "{}").setMimeType(ContentService.MimeType.JSON);
   }
+  
+  // 2. Liệt kê danh sách tất cả đề thi có trên Cloud
+  if (action == "listQuizzes") {
+    var allKeys = props.getKeys();
+    var quizzes = [];
+    allKeys.forEach(function(k) {
+      if (k.indexOf("quiz_") === 0) {
+        var q = JSON.parse(props.getProperty(k));
+        quizzes.push({id: q.id, title: q.title});
+      }
+    });
+    return ContentService.createTextOutput(JSON.stringify(quizzes)).setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  // 3. Tải danh sách kết quả bài làm của học sinh
+  if (action == "getResults") {
+    var sheet = getOrCreateSheet("Results");
+    var rows = sheet.getDataRange().getValues();
+    var results = [];
+    for (var i = 1; i < rows.length; i++) {
+      var res = JSON.parse(rows[i][3]); // Dữ liệu JSON nằm ở cột D
+      if (res.quizId == e.parameter.quizId) results.push(res);
+    }
+    return ContentService.createTextOutput(JSON.stringify(results)).setMimeType(ContentService.MimeType.JSON);
+  }
+  
   return ContentService.createTextOutput("Invalid Action");
 }
 
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
-  var cache = CacheService.getScriptCache();
+  var props = PropertiesService.getScriptProperties();
+  
+  // 4. Lưu đề thi từ máy giáo viên lên Cloud
   if (data.action == "SAVE_QUIZ") {
-    cache.put("quiz_" + data.quiz.id, JSON.stringify(data.quiz), 21600);
+    props.setProperty("quiz_" + data.quiz.id, JSON.stringify(data.quiz));
     return ContentService.createTextOutput("Success");
   }
-  return ContentService.createTextOutput("Error");
+  
+  // 5. Học sinh nộp bài thi về Cloud
+  if (data.action == "SUBMIT_RESULT") {
+    var sheet = getOrCreateSheet("Results");
+    sheet.appendRow([new Date(), data.studentName, data.score, JSON.stringify(data)]);
+    return ContentService.createTextOutput("Success");
+  }
+}
+
+function getOrCreateSheet(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    if (name == "Results") sheet.appendRow(["Thời gian", "Học sinh", "Điểm", "Dữ liệu gốc"]);
+  }
+  return sheet;
 }`;
 
   return (
@@ -29,8 +76,8 @@ function doPost(e) {
           <div className="flex items-center gap-4">
             <span className="text-3xl">☁️</span>
             <div>
-              <h3 className="text-xl font-black uppercase tracking-tight">Cấu hình Cloud Vault</h3>
-              <p className="text-[10px] font-bold opacity-80 uppercase">Kết nối Google Apps Script để lưu trữ đề thi</p>
+              <h3 className="text-xl font-black uppercase tracking-tight">Cấu hình Cloud Vault Pro</h3>
+              <p className="text-[10px] font-bold opacity-80 uppercase">Đồng bộ đề thi và bảng điểm vĩnh viễn</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 bg-white/20 rounded-full hover:bg-white/40 transition-all">
@@ -46,32 +93,32 @@ function doPost(e) {
               <section className="space-y-3">
                 <h4 className="font-black text-emerald-600 text-xs uppercase tracking-widest border-l-4 border-emerald-600 pl-3">Bước 1: Tạo Script</h4>
                 <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  Truy cập script.google.com | Chọn "Dự án mới" | Xóa hết code cũ và dán đoạn mã bên cạnh vào.
+                  Truy cập script.google.com | Tạo dự án mới gắn với 1 file Google Sheet | Dán đoạn mã bên cạnh vào.
                 </p>
               </section>
               
               <section className="space-y-3">
                 <h4 className="font-black text-emerald-600 text-xs uppercase tracking-widest border-l-4 border-emerald-600 pl-3">Bước 2: Triển khai</h4>
                 <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  Chọn "Triển khai" (Deploy) | "Triển khai mới" | Chọn loại là "Ứng dụng Web" (Web App).
+                  Chọn "Triển khai" | "Triển khai mới" | Loại "Ứng dụng Web" | Mục truy cập chọn "Bất kỳ ai".
                 </p>
                 <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
-                  <p className="text-[10px] font-black text-amber-700 uppercase mb-1">⚠️ Quan trọng</p>
-                  <p className="text-[10px] text-amber-600 font-bold">Mục "Ai có quyền truy cập" hãy chọn là "Bất kỳ ai" (Anyone).</p>
+                  <p className="text-[10px] font-black text-amber-700 uppercase mb-1">⚠️ Lưu ý</p>
+                  <p className="text-[10px] text-amber-600 font-bold">Khi Google hỏi quyền truy cập, hãy bấm "Advanced" và "Go to QuizMaster (unsafe)" để cấp quyền ghi vào Sheet.</p>
                 </div>
               </section>
 
               <section className="space-y-3">
                 <h4 className="font-black text-emerald-600 text-xs uppercase tracking-widest border-l-4 border-emerald-600 pl-3">Bước 3: Kết nối</h4>
                 <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  Sao chép "URL ứng dụng Web" | Quay lại Dashboard | Vào tab "Cloud" | Dán link vào và lưu lại.
+                  Sao chép URL Web App vừa tạo | Quay lại mục "Cloud" trong Dashboard và dán vào.
                 </p>
               </section>
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mã nguồn tham khảo</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mã nguồn đồng bộ</label>
                 <button 
                   onClick={() => { navigator.clipboard.writeText(scriptCode); alert("Đã copy!"); }}
                   className="text-[10px] font-black text-emerald-600 hover:underline uppercase"
