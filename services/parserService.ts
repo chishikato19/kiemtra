@@ -22,40 +22,42 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
 
         // 1. Phân tích Bảng đáp án để xác định loại câu hỏi
         const fullText = (doc.body as HTMLElement).innerText;
+        // Tìm vị trí bắt đầu của bảng đáp án
         const stopIndex = fullText.search(/BẢNG ĐÁP ÁN|ĐÁP ÁN/i);
         
         if (stopIndex !== -1) {
           const tableText = fullText.substring(stopIndex);
           
-          // Quét toàn bộ dòng đáp án
-          const lines = tableText.split('\n');
-          lines.forEach(line => {
-            // Regex cho MCQ: 1-A
-            const mcqMatches = line.matchAll(/(\d+)[\s.-]*([A-D])/gi);
-            for (const match of mcqMatches) {
-              answerTable[parseInt(match[1])] = { type: QuestionType.MULTIPLE_CHOICE, val: match[2].toUpperCase() };
-            }
+          // Tách bảng đáp án thành từng cụm dựa trên dấu phẩy, chấm phẩy hoặc xuống dòng
+          const answerSegments = tableText.split(/[\n,;]/);
+          
+          answerSegments.forEach(seg => {
+            const trimmedSeg = seg.trim();
+            if (!trimmedSeg) return;
 
-            // Regex cho Đúng/Sai: 1-Đ, 1-S, 1-T, 1-F
-            const tfMatches = line.matchAll(/(\d+)[\s.-]*([ĐSTF]|True|False)/gi);
-            for (const match of tfMatches) {
-              const indicator = match[2].toUpperCase()[0];
-              const isTrue = indicator === 'Đ' || indicator === 'T';
-              answerTable[parseInt(match[1])] = { type: QuestionType.TRUE_FALSE, val: isTrue };
-            }
-
-            // Regex cho Ghép nối: 15- (1-a, 2-c, 3-b)
-            const matchingMatches = line.matchAll(/(\d+)[\s.-]*\(([^)]+)\)/gi);
-            for (const match of matchingMatches) {
-              answerTable[parseInt(match[1])] = { type: QuestionType.MATCHING, val: match[2] };
-            }
-
-            // Các trường hợp còn lại là Trả lời ngắn (nếu chưa có trong table)
-            const saMatches = line.matchAll(/(\d+)[\s.-]+([^A-DĐSTF\s\n(][^\n,]*)/gi);
-            for (const match of saMatches) {
+            // Cấu trúc: số câu - đáp án (ví dụ: 1-A, 2-Paris, 3-Đ)
+            const match = trimmedSeg.match(/^(\d+)[\s.-]+(.*)$/i);
+            if (match) {
               const qNum = parseInt(match[1]);
-              if (!answerTable[qNum]) {
-                answerTable[qNum] = { type: QuestionType.SHORT_ANSWER, val: match[2].trim() };
+              const val = match[2].trim();
+
+              // Kiểm tra Trắc nghiệm (Chỉ duy nhất 1 chữ cái A, B, C, D)
+              if (val.match(/^[A-D]$/i)) {
+                answerTable[qNum] = { type: QuestionType.MULTIPLE_CHOICE, val: val.toUpperCase() };
+              }
+              // Kiểm tra Đúng/Sai (Đ, S, T, F hoặc True/False)
+              else if (val.match(/^(Đ|S|T|F|True|False)$/i)) {
+                const indicator = val.toUpperCase()[0];
+                const isTrue = indicator === 'Đ' || indicator === 'T';
+                answerTable[qNum] = { type: QuestionType.TRUE_FALSE, val: isTrue };
+              }
+              // Kiểm tra Ghép nối (Dạng (1-a, 2-b))
+              else if (val.match(/^\(.*\)$/)) {
+                answerTable[qNum] = { type: QuestionType.MATCHING, val: val.replace(/[()]/g, '') };
+              }
+              // Mặc định là Trả lời ngắn
+              else if (val.length > 0) {
+                answerTable[qNum] = { type: QuestionType.SHORT_ANSWER, val: val };
               }
             }
           });
@@ -83,6 +85,7 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
             }
 
             const qNum = parseInt(qMatch[1]);
+            // Nếu không tìm thấy trong bảng đáp án, mặc định là SHORT_ANSWER để tránh mất dữ liệu
             const ansInfo = answerTable[qNum] || { type: QuestionType.SHORT_ANSWER, val: "" };
 
             currentQuestion = {
@@ -103,17 +106,18 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
             } else if (ansInfo.type === QuestionType.SHORT_ANSWER) {
               currentQuestion.shortAnswerText = ansInfo.val;
             } else if (ansInfo.type === QuestionType.MATCHING) {
-              // Tạm thời khởi tạo mảng rỗng cho Ghép nối, giáo viên sẽ điền vế trong editor hoặc parse thêm list
               currentQuestion.matchingPairs = [{ left: 'Vế 1', right: 'Vế A' }]; 
             }
           } else if (currentQuestion) {
             const optMatch = text.match(/^([A-D]|[a-d])\s*[:.)-]\s*(.*)/i);
+            // Chỉ thêm options nếu câu hỏi được xác định là MULTIPLE_CHOICE
             if (optMatch && currentQuestion.type === QuestionType.MULTIPLE_CHOICE) {
               const optText = optMatch[2] || htmlContent.replace(/^[A-Da-d]\s*[:.)-]/i, '').trim();
               if (currentQuestion.options!.length < 4) {
                 currentQuestion.options!.push(optText);
               }
             } else {
+              // Đối với trả lời ngắn, các dòng văn bản phía dưới được gộp vào nội dung câu hỏi
               currentQuestion.text += " " + htmlContent;
             }
           }
