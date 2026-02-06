@@ -5,7 +5,7 @@ import { storageService } from '../../services/storageService';
 
 export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [stage, setStage] = useState<'login' | 'running' | 'result'>('login');
+  const [stage, setStage] = useState<'loading' | 'login' | 'running' | 'result'>('loading');
   const [studentInfo, setStudentInfo] = useState({ name: '', class: '' });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<number[]>([]);
@@ -17,16 +17,30 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   const [shuffledQuestions, setShuffledQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
-    const q = storageService.getQuizById(quizId);
-    if (q) {
-      setQuiz(q);
-      if (q.shuffleQuestions) {
-        const shuffled = [...q.questions].sort(() => Math.random() - 0.5);
-        setShuffledQuestions(shuffled);
-      } else {
-        setShuffledQuestions(q.questions);
+    const initQuiz = async () => {
+      setStage('loading');
+      // 1. Thử lấy từ LocalStorage trước
+      let q = storageService.getQuizById(quizId);
+      
+      // 2. Nếu không có, thử tải từ Cloud
+      if (!q) {
+        q = await storageService.getQuizFromCloud(quizId);
       }
-    }
+
+      if (q) {
+        setQuiz(q);
+        if (q.shuffleQuestions) {
+          const shuffled = [...q.questions].sort(() => Math.random() - 0.5);
+          setShuffledQuestions(shuffled);
+        } else {
+          setShuffledQuestions(q.questions);
+        }
+        setStage('login');
+      } else {
+        setStage('login'); // Để show lỗi "Không tìm thấy"
+      }
+    };
+    initQuiz();
   }, [quizId]);
 
   useEffect(() => {
@@ -42,7 +56,24 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     }
   }, [stage, timeLeft, userAnswers]);
 
-  if (!quiz) return <div className="text-center p-20 font-bold text-slate-400">Đề thi không tồn tại hoặc đã bị gỡ.</div>;
+  if (stage === 'loading') return (
+    <div className="flex flex-col items-center justify-center p-20 space-y-4">
+      <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="font-black text-indigo-600 uppercase tracking-widest text-xs">Đang tải đề thi từ máy chủ...</p>
+    </div>
+  );
+
+  if (!quiz) return (
+    <div className="max-w-md mx-auto bg-white p-12 rounded-[3rem] shadow-2xl text-center space-y-6 mt-10 border-2 border-red-50">
+      <div className="text-6xl">🔍</div>
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Không tìm thấy đề thi</h3>
+      <p className="text-sm text-slate-400 leading-relaxed font-medium">
+        Đề thi này không tồn tại trên máy của bạn và cũng không tìm thấy trên hệ thống Cloud. <br/>
+        Vui lòng kiểm tra lại đường link hoặc nhờ Giáo viên nhấn nút <b>"Đồng bộ Cloud"</b>.
+      </p>
+      <button onClick={() => window.location.hash = ''} className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs">Quay lại trang chủ</button>
+    </div>
+  );
 
   const startQuiz = () => {
     if (quiz.isLocked) {
@@ -114,7 +145,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     
     storageService.saveSubmission(submission);
 
-    // Lấy Link Webhook toàn cục
     const config = storageService.getAppConfig();
     if (config.globalWebhookUrl) {
       setIsSyncing(true);
@@ -124,6 +154,7 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
           mode: 'no-cors', 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'SUBMIT_RESULT',
             timestamp: new Date().toLocaleString('vi-VN'),
             quizTitle: quiz.title,
             ...submission
