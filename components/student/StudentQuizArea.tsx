@@ -103,9 +103,17 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     };
     
     storageService.saveSubmission(submission);
+    
     const config = storageService.getAppConfig();
     if (config.globalWebhookUrl) {
-       fetch(config.globalWebhookUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'SUBMIT_RESULT', ...submission, quizTitle: quiz!.title }) }).catch(() => {});
+       // Sử dụng body là string trực tiếp giúp Apps Script nhận diện tốt hơn ở chế độ no-cors
+       const payload = JSON.stringify({ action: 'SUBMIT_RESULT', ...submission, quizTitle: quiz!.title });
+       fetch(config.globalWebhookUrl, { 
+         method: 'POST', 
+         mode: 'no-cors', 
+         headers: { 'Content-Type': 'text/plain' },
+         body: payload
+       }).catch((e) => console.error("Cloud Submit Error:", e));
     }
 
     setTimeout(() => setStage('result'), 1000);
@@ -113,7 +121,6 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
 
   const handleClose = () => {
     window.close();
-    // Fallback nếu trình duyệt chặn window.close()
     alert("Vui lòng đóng tab này trên trình duyệt của bạn. Kết quả đã được ghi nhận an toàn!");
   };
 
@@ -184,23 +191,15 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   }
 
   if (stage === 'result') {
-    const sub = storageService.getSubmissions(quizId).find(s => s.studentName === studentInfo.name) || { score: 0 };
     return (
       <div className="max-w-2xl mx-auto space-y-8 mt-10 text-center pb-20 fade-in">
         <div className="bg-white p-16 rounded-[5rem] shadow-2xl border-t-[16px] border-indigo-600">
           <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner">🏆</div>
-          <h2 className="text-4xl font-black uppercase italic mb-10 text-slate-800">KẾT QUẢ CỦA BẠN</h2>
-          <div className="text-[12rem] font-black text-indigo-600 italic leading-none drop-shadow-xl">{sub.score.toFixed(1)}</div>
-          <p className="text-xl text-slate-500 font-medium mt-16 px-10">Chúc mừng <span className="text-indigo-600 font-black">{studentInfo.name}</span> đã hoàn thành bài thi một cách xuất sắc!</p>
+          <h2 className="text-4xl font-black uppercase italic mb-10 text-slate-800">Cảm ơn bạn!</h2>
+          <p className="text-xl text-slate-500 font-medium px-10">Bài làm của <span className="text-indigo-600 font-black">{studentInfo.name}</span> đã được ghi nhận thành công.</p>
         </div>
         <div className="space-y-4">
-          <button 
-            onClick={handleClose} 
-            className="px-16 py-6 bg-rose-600 text-white rounded-[2.5rem] font-black uppercase text-sm shadow-2xl shadow-rose-100 hover:bg-rose-700 hover:scale-105 transition-all"
-          >
-            Đóng cửa sổ thi
-          </button>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">Kết quả đã được hệ thống lưu trữ tự động</p>
+          <button onClick={handleClose} className="px-16 py-6 bg-rose-600 text-white rounded-[2.5rem] font-black uppercase text-sm shadow-2xl shadow-rose-100 hover:bg-rose-700 hover:scale-105 transition-all">Đóng cửa sổ thi</button>
         </div>
       </div>
     );
