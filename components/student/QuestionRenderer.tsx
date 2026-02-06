@@ -54,15 +54,24 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
 
   if (q.type === QuestionType.SHORT_ANSWER) {
     return (
-      <div className="space-y-4">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Đáp án của bạn:</label>
-        <input 
-          type="text" 
-          className="w-full border-4 p-6 rounded-3xl font-black text-2xl outline-none focus:border-indigo-600 transition-all bg-slate-50 focus:bg-white"
-          placeholder="Nhập câu trả lời..."
-          value={String(currentAns || "")}
-          onChange={(e) => onSelect(e.target.value)}
-        />
+      <div className="space-y-4 animate-fadeIn">
+        <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-4 bg-indigo-50 px-3 py-1 rounded-full">Đáp án của bạn</label>
+        <div className="relative">
+          <input 
+            type="text" 
+            className="w-full border-4 border-slate-100 p-6 rounded-3xl font-bold text-xl outline-none focus:border-indigo-600 transition-all bg-slate-50 focus:bg-white shadow-inner"
+            placeholder="Nhập nội dung trả lời tại đây..."
+            value={String(currentAns || "")}
+            onChange={(e) => onSelect(e.target.value)}
+            autoFocus
+          />
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-400 italic ml-4">* Hệ thống sẽ tự động so khớp đáp án (không phân biệt hoa/thường).</p>
       </div>
     );
   }
