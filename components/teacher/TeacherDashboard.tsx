@@ -10,6 +10,7 @@ export const TeacherDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'stats' | 'edit'>('list');
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [quizToEdit, setQuizToEdit] = useState<Quiz | undefined>(undefined);
+  const [showHelp, setShowHelp] = useState(false);
   
   const [shareModal, setShareModal] = useState<{ isOpen: boolean, url: string, title: string }>({
     isOpen: false,
@@ -58,7 +59,7 @@ export const TeacherDashboard: React.FC = () => {
           <h2 className="text-3xl font-black text-slate-800">Bảng điều khiển</h2>
           <p className="text-slate-500 font-medium">Phiên bản Evolution Edition v2.5</p>
         </div>
-        <div className="flex gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
+        <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
           <button 
             onClick={() => { setActiveTab('list'); setQuizToEdit(undefined); }}
             className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeTab === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -71,12 +72,18 @@ export const TeacherDashboard: React.FC = () => {
           >
             + Tạo đề mới
           </button>
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="px-4 py-2 rounded-xl font-bold text-emerald-600 hover:bg-emerald-50 text-sm flex items-center gap-1"
+          >
+            📊 HD Google Sheets
+          </button>
         </div>
       </div>
 
       {activeTab === 'list' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
              <button 
               onClick={handleSeed}
               className="text-xs font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100"
@@ -107,11 +114,6 @@ export const TeacherDashboard: React.FC = () => {
                     <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
                       <span className="flex items-center gap-1">🏫 Lớp: <b>{q.classId}</b></span>
                       <span className="flex items-center gap-1">📝 <b>{q.questions.length}</b> câu hỏi</span>
-                      {q.isLocked ? (
-                        <span className="text-red-500 font-bold uppercase text-[10px]">● Đang khóa truy cập</span>
-                      ) : (
-                        <span className="text-emerald-500 font-bold uppercase text-[10px]">● Đang mở</span>
-                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -145,12 +147,6 @@ export const TeacherDashboard: React.FC = () => {
                     >
                       📊 THỐNG KÊ
                     </button>
-                    <button 
-                      onClick={() => { if(confirm('Xóa đề này?')) { storageService.deleteQuiz(q.id); setQuizzes(storageService.getQuizzes()); } }}
-                      className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
                   </div>
                 </div>
               ))
@@ -168,6 +164,68 @@ export const TeacherDashboard: React.FC = () => {
 
       {activeTab === 'stats' && selectedQuizId && (
         <QuizStatsView quizId={selectedQuizId} onBack={() => setActiveTab('list')} />
+      )}
+
+      {/* Modal Hướng dẫn Google Sheets */}
+      {showHelp && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden fade-in flex flex-col max-h-[90vh]">
+            <div className="p-8 bg-emerald-600 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tight">Hướng dẫn Google Sheets</h3>
+                <p className="opacity-80 text-sm font-medium">Đưa dữ liệu trắc nghiệm lên bảng tính chuyên nghiệp</p>
+              </div>
+              <button onClick={() => setShowHelp(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/40 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+              <section className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">1</span>
+                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách đơn giản: Xuất file CSV</h4>
+                </div>
+                <div className="ml-11 text-slate-600 space-y-2 text-sm leading-relaxed">
+                  <p>Đây là cách nhanh nhất để lấy điểm học sinh về máy tính:</p>
+                  <ul className="list-disc ml-4 space-y-1 font-medium">
+                    <li>Vào mục <b>Thống kê</b> của một đề thi cụ thể.</li>
+                    <li>Nhấn nút <b>"Xuất CSV"</b> để tải file dữ liệu về máy.</li>
+                    <li>Mở <a href="https://sheets.new" target="_blank" className="text-emerald-600 underline">Google Sheets</a>, vào <b>Tệp > Nhập > Tải lên</b> và chọn file vừa tải.</li>
+                    <li>Google Sheets sẽ tự động chia cột: Tên, Lớp, Điểm, Thời gian...</li>
+                  </ul>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">2</span>
+                  <h4 className="font-black text-slate-800 uppercase tracking-wider">Cách nâng cao: Dùng Apps Script</h4>
+                </div>
+                <div className="ml-11 text-slate-600 space-y-3 text-sm leading-relaxed">
+                  <p>Nếu bạn muốn dữ liệu tự động đổ về Sheets mỗi khi học sinh nộp bài (cần có server trung gian), bạn có thể thiết lập như sau:</p>
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 font-mono text-[11px] leading-tight">
+                    <p className="text-indigo-600 mb-2">// Ví dụ mã script cho Google Apps Script:</p>
+                    <p>function doPost(e) &#123;</p>
+                    <p>&nbsp;&nbsp;var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();</p>
+                    <p>&nbsp;&nbsp;var data = JSON.parse(e.postData.contents);</p>
+                    <p>&nbsp;&nbsp;sheet.appendRow([new Date(), data.studentName, data.studentClass, data.score]);</p>
+                    <p>&nbsp;&nbsp;return ContentService.createTextOutput("Success");</p>
+                    <p>&#125;</p>
+                  </div>
+                  <p className="font-medium">Lưu ý: Tính năng kết nối Webhook tự động sẽ được cập nhật trong phiên bản v3.0 tới.</p>
+                </div>
+              </section>
+
+              <section className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
+                <h4 className="font-black text-indigo-900 uppercase text-xs mb-2">Mẹo quản lý</h4>
+                <p className="text-indigo-700/80 text-xs italic">Sử dụng hàm <code>=VLOOKUP</code> trong Google Sheets để đối chiếu điểm số với danh sách lớp chính thức của bạn một cách tự động.</p>
+              </section>
+            </div>
+            <div className="p-6 bg-slate-50 border-t flex justify-center">
+              <button onClick={() => setShowHelp(false)} className="px-10 py-3 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:bg-emerald-700 transition-all uppercase text-xs">Đã rõ, cảm ơn!</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {shareModal.isOpen && (
