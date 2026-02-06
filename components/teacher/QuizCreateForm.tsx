@@ -12,6 +12,7 @@ interface QuizCreateFormProps {
 
 export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizToEdit }) => {
   const [isParsing, setIsParsing] = useState(false);
+  const [parseStatus, setParseStatus] = useState<{ type: 'idle' | 'success' | 'error', message?: string }>({ type: 'idle' });
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
@@ -55,6 +56,8 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
     if (!file) return;
 
     setIsParsing(true);
+    setParseStatus({ type: 'idle' });
+    
     try {
       const result = await parseWordFile(file);
       const newQuestions = result.questions.map(q => ({ ...q, points: 0 }));
@@ -63,10 +66,12 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
         title: prev.title || result.title,
         questions: [...(prev.questions || []), ...newQuestions]
       }));
+      setParseStatus({ type: 'success', message: `Đã tải thành công ${result.questions.length} câu hỏi!` });
     } catch (err: any) {
-      alert("Lỗi: " + err.message);
+      setParseStatus({ type: 'error', message: err.message || "Lỗi không xác định khi đọc file." });
     } finally {
       setIsParsing(false);
+      e.target.value = ''; // Reset input file
     }
   };
 
@@ -113,12 +118,20 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
   };
 
   return (
-    <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in">
+    <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in relative overflow-hidden">
+      {/* Overlay Loading khi đang parse */}
+      {isParsing && (
+        <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="font-black text-indigo-600 uppercase tracking-widest animate-pulse">Đang phân tích file Word...</p>
+        </div>
+      )}
+
       <div className="flex justify-between items-center border-b pb-6">
         <h3 className="text-2xl font-black text-indigo-600 tracking-tight">
           {quizToEdit ? 'CHỈNH SỬA ĐỀ THI' : 'THIẾT LẬP ĐỀ THI MỚI'}
         </h3>
-        <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase">v2.7 Cloud Arch</div>
+        <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest">v2.8 Smart Parser</div>
       </div>
       
       <div className="grid md:grid-cols-2 gap-8">
@@ -219,23 +232,32 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
         <div className="flex justify-between items-center">
           <h4 className="font-black text-slate-700 uppercase tracking-widest text-[10px]">Quản lý câu hỏi ({formData.questions?.length || 0})</h4>
           <div className="flex gap-2">
-            <label className="cursor-pointer bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-slate-200 transition-all flex items-center gap-2">
-              <span>{isParsing ? 'ĐANG XỬ LÝ...' : '📂 TỪ FILE WORD'}</span>
+            <label className="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
+              <span>📂 TẢI FILE WORD</span>
               <input type="file" accept=".docx" className="hidden" onChange={handleFileUpload} />
             </label>
             <button 
               onClick={() => setIsAddingNew(true)}
-              className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-indigo-100 transition-all"
+              className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-slate-200 transition-all"
             >
-              + THỦ CÔNG
+              + THÊM THỦ CÔNG
             </button>
           </div>
         </div>
 
+        {/* Thông báo kết quả nạp đề */}
+        {parseStatus.type !== 'idle' && (
+          <div className={`p-4 rounded-2xl flex items-center gap-3 fade-in ${parseStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>
+            <span className="text-xl">{parseStatus.type === 'success' ? '✅' : '❌'}</span>
+            <p className="text-xs font-bold uppercase tracking-tight">{parseStatus.message}</p>
+            <button onClick={() => setParseStatus({type: 'idle'})} className="ml-auto text-xs opacity-50 font-black">ĐÓNG</button>
+          </div>
+        )}
+
         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-3 custom-scrollbar">
           {formData.questions?.length === 0 ? (
             <div className="bg-slate-50 border-2 border-dashed rounded-[2rem] p-12 text-center text-slate-400 font-medium italic">
-              Danh sách câu hỏi đang trống...
+              Danh sách câu hỏi đang trống. Vui lòng tải file Word (.docx) đúng định dạng.
             </div>
           ) : (
             formData.questions?.map((q, idx) => (
