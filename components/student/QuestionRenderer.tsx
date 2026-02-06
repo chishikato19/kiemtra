@@ -54,24 +54,27 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
 
   if (q.type === QuestionType.SHORT_ANSWER) {
     return (
-      <div className="space-y-4 animate-fadeIn">
-        <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-4 bg-indigo-50 px-3 py-1 rounded-full">Đáp án của bạn</label>
-        <div className="relative">
+      <div className="space-y-4 animate-fadeIn py-4">
+        <div className="flex items-center gap-2 ml-4">
+          <span className="bg-indigo-600 w-2 h-2 rounded-full animate-pulse"></span>
+          <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Vui lòng nhập câu trả lời của bạn</label>
+        </div>
+        <div className="relative group">
           <input 
             type="text" 
-            className="w-full border-4 border-slate-100 p-6 rounded-3xl font-bold text-xl outline-none focus:border-indigo-600 transition-all bg-slate-50 focus:bg-white shadow-inner"
-            placeholder="Nhập nội dung trả lời tại đây..."
+            className="w-full border-4 border-slate-100 p-7 rounded-[2.5rem] font-bold text-2xl outline-none focus:border-indigo-600 transition-all bg-slate-50 focus:bg-white shadow-inner placeholder:text-slate-300 placeholder:italic placeholder:font-medium"
+            placeholder="Nhập nội dung tại đây..."
             value={String(currentAns || "")}
             onChange={(e) => onSelect(e.target.value)}
             autoFocus
           />
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2.5 2.5 0 113.536 3.536L12 17.207l-4 1 1-4 9.414-9.414z" />
             </svg>
           </div>
         </div>
-        <p className="text-[10px] text-slate-400 italic ml-4">* Hệ thống sẽ tự động so khớp đáp án (không phân biệt hoa/thường).</p>
+        <p className="text-[10px] text-slate-400 italic ml-6 font-medium">Lưu ý: Hệ thống tự động so khớp đáp án (không phân biệt chữ HOA hay thường).</p>
       </div>
     );
   }
