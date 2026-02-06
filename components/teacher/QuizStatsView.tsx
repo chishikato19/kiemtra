@@ -1,10 +1,13 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { storageService } from '../../services/storageService';
 
 export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = ({ quizId, onBack }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
   const quiz = useMemo(() => storageService.getQuizById(quizId), [quizId]);
-  const submissions = useMemo(() => storageService.getSubmissions(quizId), [quizId]);
+  
+  // Sử dụng state để force re-render khi sync xong
+  const [submissions, setSubmissions] = useState(() => storageService.getSubmissions(quizId));
 
   const stats = useMemo(() => {
     if (submissions.length === 0) return null;
@@ -17,61 +20,64 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
     };
   }, [submissions]);
 
+  const handleSyncFromCloud = async () => {
+    setIsSyncing(true);
+    const count = await storageService.syncResultsFromCloud(quizId);
+    setSubmissions(storageService.getSubmissions(quizId));
+    setIsSyncing(false);
+    alert(`Đã cập nhật thêm ${count} bài làm mới từ Cloud.`);
+  };
+
   const exportCSV = () => {
     if (submissions.length === 0) return;
-    
-    // Header
     const headers = ["STT", "Họ tên", "Lớp", "Điểm số", "Thời gian làm bài (s)", "Thời điểm nộp"];
-    
-    // Data
     const rows = submissions.sort((a,b) => b.score - a.score).map((s, idx) => [
-      idx + 1,
-      s.studentName,
-      s.studentClass,
-      s.score.toFixed(1),
-      s.timeTaken,
-      new Date(s.submittedAt).toLocaleString('vi-VN')
+      idx + 1, s.studentName, s.studentClass, s.score.toFixed(1),
+      s.timeTaken, new Date(s.submittedAt).toLocaleString('vi-VN')
     ]);
-
     const csvContent = "\ufeff" + [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Ket-qua-${quiz?.title || 'quiz'}-${quiz?.classId || ''}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = `Ket-qua-${quiz?.title || 'quiz'}-${quiz?.classId || ''}.csv`;
     link.click();
-    document.body.removeChild(link);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <button onClick={onBack} className="text-slate-500 font-bold hover:text-indigo-600 flex items-center gap-1 transition-colors">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           Quay lại danh sách
         </button>
-        {submissions.length > 0 && (
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <button 
-            onClick={exportCSV}
-            className="bg-emerald-600 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 flex items-center gap-2 hover:bg-emerald-700 transition-all active:scale-95"
+            onClick={handleSyncFromCloud}
+            disabled={isSyncing}
+            className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${isSyncing ? 'bg-slate-100 text-slate-400 animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            Xuất CSV (Google Sheets)
+            {isSyncing ? 'Đang đồng bộ...' : '🔄 Cập nhật bài làm từ Cloud'}
           </button>
-        )}
+          {submissions.length > 0 && (
+            <button 
+              onClick={exportCSV}
+              className="flex-1 md:flex-none bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all"
+            >
+              📥 Xuất CSV (Sheets)
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white p-8 rounded-3xl border shadow-lg space-y-6">
         <div className="flex justify-between items-start border-b pb-6">
           <div>
             <h3 className="text-2xl font-black text-slate-800">{quiz?.title}</h3>
-            <p className="text-slate-500 italic font-medium">Báo cáo kết quả lớp {quiz?.classId}</p>
+            <p className="text-slate-500 italic font-medium uppercase text-xs">Kết quả lớp {quiz?.classId}</p>
           </div>
           {stats && (
             <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điểm trung bình</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điểm TB</p>
               <p className="text-4xl font-black text-indigo-600">{stats.avg.toFixed(1)}</p>
             </div>
           )}
@@ -80,7 +86,7 @@ export const QuizStatsView: React.FC<{ quizId: string, onBack: () => void }> = (
         {!stats ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-3xl opacity-50 grayscale">📊</div>
-            <p className="text-slate-400 font-medium">Chưa có lượt nộp bài nào để thống kê.</p>
+            <p className="text-slate-400 font-medium">Chưa có kết quả bài làm. Hãy nhấn "Cập nhật từ Cloud" nếu bạn đã chia sẻ đề.</p>
           </div>
         ) : (
           <div className="space-y-8">
