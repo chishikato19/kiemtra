@@ -13,6 +13,7 @@ export const TeacherDashboard: React.FC = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [appConfig, setAppConfig] = useState<AppConfig>({ globalWebhookUrl: '' });
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [isPulling, setIsPulling] = useState(false);
   
   const [shareModal, setShareModal] = useState<{ isOpen: boolean, url: string, title: string, id: string }>({
     isOpen: false,
@@ -32,6 +33,19 @@ export const TeacherDashboard: React.FC = () => {
     setActiveTab('list');
   };
 
+  const handlePullQuizzes = async () => {
+    if (!appConfig.globalWebhookUrl) {
+      alert("Vui lòng cấu hình Cloud trước!");
+      setActiveTab('config');
+      return;
+    }
+    setIsPulling(true);
+    const count = await storageService.syncAllQuizzesFromCloud();
+    setQuizzes(storageService.getQuizzes());
+    setIsPulling(false);
+    alert(`Đã tải về ${count} đề thi từ Cloud.`);
+  };
+
   const syncQuizToCloud = async (quiz: Quiz) => {
     if (!appConfig.globalWebhookUrl) {
       alert("Vui lòng cài đặt cấu hình Cloud trước!");
@@ -41,7 +55,6 @@ export const TeacherDashboard: React.FC = () => {
 
     setSyncingId(quiz.id);
     try {
-      // Sử dụng POST để lưu đề
       await fetch(appConfig.globalWebhookUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -51,20 +64,11 @@ export const TeacherDashboard: React.FC = () => {
           quiz: quiz
         })
       });
-      alert(`Đã đồng bộ đề "${quiz.title}" lên Cloud! Link chia sẻ bây giờ đã bao gồm cấu hình Cloud của bạn.`);
+      alert(`Đã đồng bộ đề "${quiz.title}" lên Cloud!`);
     } catch (err) {
       alert("Lỗi đồng bộ: " + err);
     } finally {
       setSyncingId(null);
-    }
-  };
-
-  const handleSeed = () => {
-    if (storageService.seedSampleData()) {
-      setQuizzes(storageService.getQuizzes());
-      alert("Đã tạo đề thi mẫu thành công!");
-    } else {
-      alert("Đề thi mẫu đã tồn tại.");
     }
   };
 
@@ -80,7 +84,6 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const openShareModal = (quiz: Quiz) => {
-    // Nhúng Webhook URL vào link chia sẻ (Mã hóa Base64 để tránh lỗi ký tự đặc biệt)
     const encodedW = btoa(appConfig.globalWebhookUrl).replace(/=/g, '');
     const url = `${window.location.origin}${window.location.pathname}#/quiz/${quiz.id}?w=${encodedW}`;
     setShareModal({ isOpen: true, url, title: quiz.title, id: quiz.id });
@@ -93,7 +96,7 @@ export const TeacherDashboard: React.FC = () => {
 
   const appsScriptCode = `/**
  * GOOGLE APPS SCRIPT: HỆ THỐNG CLOUD QUIZMASTER PRO
- * Phiên bản: 3.1 (Hỗ trợ Đồng bộ Đề thi xuyên thiết bị)
+ * Phiên bản: 3.2 (Hỗ trợ Tải đề & Tải kết quả bài làm)
  */
 
 function doPost(e) {
@@ -101,20 +104,14 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // 1. Lưu nội dung ĐỀ THI
     if (data.action === "SAVE_QUIZ") {
       var quizSheet = ss.getSheetByName("CLOUD_QUIZZES") || ss.insertSheet("CLOUD_QUIZZES");
-      if (quizSheet.getLastRow() === 0) {
-        quizSheet.appendRow(["ID", "DataJSON", "CreatedAt"]);
-      }
+      if (quizSheet.getLastRow() === 0) quizSheet.appendRow(["ID", "DataJSON", "CreatedAt"]);
       
       var rows = quizSheet.getDataRange().getValues();
       var foundIndex = -1;
       for (var i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.quiz.id) {
-          foundIndex = i + 1;
-          break;
-        }
+        if (rows[i][0] === data.quiz.id) { foundIndex = i + 1; break; }
       }
       
       if (foundIndex > -1) {
@@ -126,23 +123,17 @@ function doPost(e) {
       return ContentService.createTextOutput("QUIZ_SAVED");
     }
     
-    // 2. Lưu KẾT QUẢ bài làm học sinh
-    var sheet = ss.getSheetByName("RESULTS") || ss.insertSheet("RESULTS");
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(["Thời gian", "Đề thi", "Họ tên", "Lớp", "Điểm", "Tổng câu", "Thời gian làm(s)"]);
+    if (data.action === "SUBMIT_RESULT") {
+      var sheet = ss.getSheetByName("RESULTS") || ss.insertSheet("RESULTS");
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(["ID", "QuizID", "Họ tên", "Lớp", "Điểm", "Thời gian(s)", "Thời điểm nộp", "QuizTitle"]);
+      }
+      sheet.appendRow([
+        data.id, data.quizId, data.studentName, data.studentClass, 
+        data.score, data.timeTaken, data.timestamp, data.quizTitle
+      ]);
+      return ContentService.createTextOutput("RESULT_SAVED");
     }
-    
-    sheet.appendRow([
-      data.timestamp || new Date().toLocaleString(),
-      data.quizTitle,
-      data.studentName,
-      data.studentClass,
-      data.score,
-      data.totalQuestions,
-      data.timeTaken
-    ]);
-    
-    return ContentService.createTextOutput("RESULT_SAVED");
   } catch (err) {
     return ContentService.createTextOutput("ERROR: " + err.toString());
   }
@@ -156,15 +147,41 @@ function doGet(e) {
     var quizId = e.parameter.quizId;
     var quizSheet = ss.getSheetByName("CLOUD_QUIZZES");
     if (!quizSheet) return ContentService.createTextOutput("NOT_FOUND");
-    
     var rows = quizSheet.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
-      if (rows[i][0] === quizId) {
-        return ContentService.createTextOutput(rows[i][1]).setMimeType(ContentService.MimeType.JSON);
-      }
+      if (rows[i][0] === quizId) return ContentService.createTextOutput(rows[i][1]).setMimeType(ContentService.MimeType.JSON);
     }
   }
-  return ContentService.createTextOutput("NOT_FOUND");
+
+  if (action === "listQuizzes") {
+    var quizSheet = ss.getSheetByName("CLOUD_QUIZZES");
+    if (!quizSheet) return ContentService.createTextOutput("[]").setMimeType(ContentService.MimeType.JSON);
+    var rows = quizSheet.getDataRange().getValues();
+    var list = [];
+    for (var i = 1; i < rows.length; i++) {
+      list.push(JSON.parse(rows[i][1]));
+    }
+    return ContentService.createTextOutput(JSON.stringify(list)).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === "getResults") {
+    var quizId = e.parameter.quizId;
+    var resultSheet = ss.getSheetByName("RESULTS");
+    if (!resultSheet) return ContentService.createTextOutput("[]").setMimeType(ContentService.MimeType.JSON);
+    var rows = resultSheet.getDataRange().getValues();
+    var results = [];
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][1] === quizId) {
+        results.push({
+          id: rows[i][0], quizId: rows[i][1], studentName: rows[i][2],
+          studentClass: rows[i][3], score: rows[i][4], timeTaken: rows[i][5],
+          submittedAt: new Date(rows[i][6]).getTime()
+        });
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify(results)).setMimeType(ContentService.MimeType.JSON);
+  }
+  return ContentService.createTextOutput("INVALID_ACTION");
 }`;
 
   return (
@@ -172,7 +189,7 @@ function doGet(e) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800">Bảng điều khiển</h2>
-          <p className="text-slate-500 font-medium">Phiên bản Smart Link v3.1</p>
+          <p className="text-slate-500 font-medium">Smart Sync v3.2</p>
         </div>
         <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-2xl shadow-sm border items-center">
           <button 
@@ -198,30 +215,22 @@ function doGet(e) {
 
       {activeTab === 'list' && (
         <div className="space-y-4">
-          {!appConfig.globalWebhookUrl && (
-            <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl flex items-center justify-between gap-4 animate-pulse">
-               <div className="flex items-center gap-3">
-                 <span className="text-2xl">⚡</span>
-                 <p className="text-sm font-bold text-amber-800">Bạn chưa cài đặt link Google Sheets. Hãy cài đặt để học sinh có thể thấy đề thi!</p>
-               </div>
-               <button onClick={() => setActiveTab('config')} className="bg-amber-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase">Cài đặt ngay</button>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-between items-center bg-white p-4 rounded-3xl border shadow-sm">
+             <p className="text-sm font-bold text-slate-500 px-2">Quản lý các đề thi của bạn</p>
              <button 
-              onClick={handleSeed}
-              className="text-xs font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100"
-            >
-              <span>✨ Tạo dữ liệu mẫu</span>
-            </button>
+                onClick={handlePullQuizzes}
+                disabled={isPulling}
+                className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all ${isPulling ? 'bg-slate-100 text-slate-400 animate-pulse' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+             >
+               {isPulling ? 'Đang tải...' : '📥 Tải đề từ Cloud'}
+             </button>
           </div>
           
           <div className="grid gap-4">
             {quizzes.length === 0 ? (
               <div className="bg-white p-20 text-center rounded-[2rem] border-2 border-dashed border-slate-200">
-                <p className="text-slate-400 font-medium mb-4">Chưa có đề thi nào trong hệ thống.</p>
-                <button onClick={() => setActiveTab('create')} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Bắt đầu tạo đề đầu tiên</button>
+                <p className="text-slate-400 font-medium mb-4">Chưa có đề thi nào. Hãy tạo mới hoặc tải từ Cloud.</p>
+                <button onClick={() => setActiveTab('create')} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Bắt đầu tạo đề</button>
               </div>
             ) : (
               quizzes.sort((a,b) => b.createdAt - a.createdAt).map(q => (
@@ -236,49 +245,27 @@ function doGet(e) {
                         {q.mode === QuizMode.TEST ? 'Kiểm tra' : 'Luyện tập'}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
-                      <span className="flex items-center gap-1">🏫 Lớp: <b>{q.classId}</b></span>
-                      <span className="flex items-center gap-1">📝 <b>{q.questions.length}</b> câu hỏi</span>
-                    </div>
+                    <p className="text-sm text-slate-500 font-medium">🏫 Lớp: <b>{q.classId}</b> • 📝 <b>{q.questions.length}</b> câu hỏi</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button 
                       onClick={() => syncQuizToCloud(q)}
                       className={`px-4 py-2.5 rounded-2xl transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${syncingId === q.id ? 'bg-slate-100 text-slate-400 animate-pulse' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
                       disabled={syncingId === q.id}
-                      title="Đẩy đề thi lên máy chủ"
                     >
-                      {syncingId === q.id ? 'Đang đẩy...' : '☁️ Đồng bộ Cloud'}
-                    </button>
-                    <button 
-                      onClick={() => toggleLock(q)}
-                      className={`p-2.5 rounded-2xl transition-all ${q.isLocked ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
-                      title={q.isLocked ? "Mở khóa đề" : "Khóa đề"}
-                    >
-                      {q.isLocked ? (
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
-                      ) : (
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                      )}
-                    </button>
-                    <button 
-                      onClick={() => handleEdit(q)}
-                      className="p-2.5 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 transition-all"
-                      title="Chỉnh sửa đề"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    </button>
-                    <button 
-                      onClick={() => openShareModal(q)} 
-                      className="flex-1 md:flex-none px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-100"
-                    >
-                      <span>🚀 CHIA SẺ</span>
+                      {syncingId === q.id ? 'Đang đẩy...' : '☁️ Đẩy lên Cloud'}
                     </button>
                     <button 
                       onClick={() => { setSelectedQuizId(q.id); setActiveTab('stats'); }}
-                      className="flex-1 md:flex-none px-5 py-2.5 bg-slate-100 text-slate-700 rounded-2xl font-black hover:bg-slate-200 transition-colors"
+                      className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-2xl font-black hover:bg-slate-200 transition-colors uppercase text-[10px] tracking-widest"
                     >
-                      📊 THỐNG KÊ
+                      📊 Thống kê
+                    </button>
+                    <button 
+                      onClick={() => openShareModal(q)} 
+                      className="px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 shadow-lg shadow-indigo-100 uppercase text-[10px] tracking-widest"
+                    >
+                      🚀 Chia sẻ
                     </button>
                   </div>
                 </div>
@@ -292,12 +279,11 @@ function doGet(e) {
         <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in">
           <div className="space-y-2">
             <h3 className="text-2xl font-black text-emerald-600 uppercase tracking-tight">Cấu hình Hệ thống Cloud</h3>
-            <p className="text-slate-500 font-medium">Link Webhook này giúp học sinh có thể tải đề thi từ bất kỳ máy tính nào.</p>
+            <p className="text-slate-500 font-medium">Link Webhook v3.2 giúp đồng bộ toàn bộ dữ liệu Đề thi và Kết quả học sinh.</p>
           </div>
-
           <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-3">Google Apps Script Web App URL</label>
+              <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-3">Apps Script URL</label>
               <input 
                 type="url" 
                 value={appConfig.globalWebhookUrl} 
@@ -306,80 +292,52 @@ function doGet(e) {
                 placeholder="https://script.google.com/macros/s/.../exec"
               />
             </div>
-          </div>
-
-          <div className="flex gap-3">
-             <button 
-              onClick={() => setActiveTab('list')}
-              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-[2rem] font-black uppercase tracking-widest text-xs"
-            >
-              Hủy
-            </button>
             <button 
-              onClick={handleSaveConfig}
-              className="flex-[2] py-4 bg-emerald-600 text-white rounded-[2rem] font-black shadow-xl hover:bg-emerald-700 transition-all uppercase tracking-widest text-xs"
+              onClick={() => setShowHelp(true)}
+              className="text-xs font-black text-emerald-600 underline hover:text-emerald-800"
             >
-              Cập nhật cấu hình
+              Lấy mã Apps Script v3.2
             </button>
           </div>
+          <button onClick={handleSaveConfig} className="w-full py-4 bg-emerald-600 text-white rounded-[2rem] font-black shadow-xl uppercase tracking-widest text-xs">Cập nhật cấu hình</button>
         </div>
       )}
 
       {(activeTab === 'create' || activeTab === 'edit') && (
-        <QuizCreateForm 
-          quizToEdit={quizToEdit} 
-          onSuccess={() => { setActiveTab('list'); setQuizToEdit(undefined); }} 
-        />
+        <QuizCreateForm quizToEdit={quizToEdit} onSuccess={() => setActiveTab('list')} />
       )}
 
       {activeTab === 'stats' && selectedQuizId && (
         <QuizStatsView quizId={selectedQuizId} onBack={() => setActiveTab('list')} />
       )}
 
+      {showHelp && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
+              <h3 className="text-2xl font-black uppercase">Apps Script v3.2 Cloud Sync</h3>
+              <button onClick={() => setShowHelp(false)} className="bg-white/20 p-2 rounded-full">X</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <pre className="bg-slate-900 text-emerald-400 p-6 rounded-2xl overflow-x-auto text-[11px] font-mono leading-relaxed shadow-inner mb-6">
+                {appsScriptCode}
+              </pre>
+              <button onClick={() => copyToClipboard(appsScriptCode)} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs">Sao chép mã v3.2</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {shareModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-sm:w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden fade-in border-t-[10px] border-indigo-600">
-            <div className="p-8 text-center space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Chia sẻ đề thi</h3>
-                <p className="text-slate-500 font-medium text-sm">{shareModal.title}</p>
-              </div>
-
-              <div className="bg-slate-50 p-6 rounded-[2.5rem] inline-block border-2 border-slate-100 shadow-inner">
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareModal.url)}`} 
-                  alt="QR Code"
-                  className="w-44 h-44 mx-auto"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                <p className="text-[9px] text-amber-700 font-bold uppercase">Lưu ý</p>
-                <p className="text-[10px] text-amber-600">Link này chứa sẵn cấu hình Cloud của bạn để học sinh máy khác tự động nhận diện.</p>
-              </div>
-
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  readOnly 
-                  value={shareModal.url}
-                  className="flex-1 bg-slate-50 border-2 border-slate-100 p-3 rounded-xl text-[10px] font-mono text-slate-500 outline-none"
-                />
-                <button 
-                  onClick={() => copyToClipboard(shareModal.url)}
-                  className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                </button>
-              </div>
-
-              <button 
-                onClick={() => setShareModal({ ...shareModal, isOpen: false, url: '', title: '', id: '' })}
-                className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-colors uppercase tracking-widest text-xs"
-              >
-                ĐÓNG
-              </button>
+          <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl p-8 text-center space-y-6">
+            <h3 className="text-2xl font-black uppercase">{shareModal.title}</h3>
+            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareModal.url)}`} className="w-44 h-44 mx-auto" alt="QR" />
+            <div className="flex gap-2">
+              <input readOnly value={shareModal.url} className="flex-1 bg-slate-50 border p-3 rounded-xl text-[10px] font-mono" />
+              <button onClick={() => copyToClipboard(shareModal.url)} className="bg-indigo-600 text-white p-3 rounded-xl">Copy</button>
             </div>
+            <button onClick={() => setShareModal({ ...shareModal, isOpen: false, id: '' })} className="w-full py-3 bg-slate-100 rounded-xl font-black uppercase text-xs">Đóng</button>
           </div>
         </div>
       )}
