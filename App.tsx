@@ -4,6 +4,7 @@ import { UserRole } from './types';
 import { Layout } from './components/Layout';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
 import { StudentQuizArea } from './components/student/StudentQuizArea';
+import { storageService } from './services/storageService';
 
 const App: React.FC = () => {
   const [route, setRoute] = useState<{ role: UserRole | null, quizId: string | null }>({
@@ -14,8 +15,29 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
+      
+      // Xử lý link học sinh: #/quiz/ID?w=ENCODED_WEBHOOK
       if (hash.startsWith('#/quiz/')) {
-        setRoute({ role: UserRole.STUDENT, quizId: hash.replace('#/quiz/', '') });
+        const fullPath = hash.replace('#/quiz/', '');
+        const [quizId, query] = fullPath.split('?');
+        
+        // Nếu có tham số 'w' (webhook encoded)
+        if (query && query.startsWith('w=')) {
+          const encodedW = query.replace('w=', '');
+          try {
+            const decodedW = atob(encodedW);
+            // Nếu máy học sinh chưa có cấu hình, hoặc cấu hình khác, tự động cập nhật
+            const currentConfig = storageService.getAppConfig();
+            if (currentConfig.globalWebhookUrl !== decodedW) {
+              storageService.saveAppConfig({ globalWebhookUrl: decodedW });
+              console.log("Đã tự động cập nhật cấu hình Cloud từ link giáo viên.");
+            }
+          } catch (e) {
+            console.error("Lỗi giải mã cấu hình Cloud:", e);
+          }
+        }
+        
+        setRoute({ role: UserRole.STUDENT, quizId: quizId });
       } else if (hash === '#/teacher') {
         setRoute({ role: UserRole.TEACHER, quizId: null });
       } else {
@@ -31,7 +53,6 @@ const App: React.FC = () => {
   if (!route.role) {
     return (
       <div className="min-h-screen bg-indigo-900 flex items-center justify-center p-6 overflow-hidden relative">
-        {/* Background Decor */}
         <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-800 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl opacity-50"></div>
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-700 rounded-full translate-x-1/2 translate-y-1/2 blur-3xl opacity-50"></div>
 
