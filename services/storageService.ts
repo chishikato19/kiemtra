@@ -16,52 +16,58 @@ export const storageService = {
   },
 
   async getQuizFromCloud(quizId: string): Promise<Quiz | null> {
-    const config = this.getAppConfig();
+    const config = storageService.getAppConfig();
     if (!config.globalWebhookUrl) return null;
 
     try {
       const url = `${config.globalWebhookUrl}?action=getQuiz&quizId=${quizId}`;
       const response = await fetch(url);
       if (!response.ok) return null;
+      
       const result = await response.json();
       if (result && result.id) {
-        this.saveQuiz(result);
+        storageService.saveQuiz(result);
         return result;
       }
     } catch (err) {
-      console.error("Lỗi tải đề từ Cloud:", err);
+      console.error("Lỗi tải đề từ Cloud Vault:", err);
     }
     return null;
   },
 
   async syncAllQuizzesFromCloud(): Promise<number> {
-    const config = this.getAppConfig();
+    const config = storageService.getAppConfig();
     if (!config.globalWebhookUrl) return 0;
     try {
       const url = `${config.globalWebhookUrl}?action=listQuizzes`;
       const response = await fetch(url);
-      const cloudQuizzes: Quiz[] = await response.json();
+      const cloudQuizzes: any[] = await response.json();
+      
       let count = 0;
-      cloudQuizzes.forEach(q => {
-        this.saveQuiz(q);
-        count++;
-      });
+      const localQuizzes = storageService.getQuizzes();
+
+      for (const mq of cloudQuizzes) {
+        if (!localQuizzes.find(lq => lq.id === mq.id)) {
+           const fullQuiz = await storageService.getQuizFromCloud(mq.id);
+           if (fullQuiz) count++;
+        }
+      }
       return count;
     } catch (err) {
-      console.error("Lỗi đồng bộ danh sách đề:", err);
+      console.error("Lỗi đồng bộ danh mục đề từ Drive:", err);
       return 0;
     }
   },
 
   async syncResultsFromCloud(quizId: string): Promise<number> {
-    const config = this.getAppConfig();
+    const config = storageService.getAppConfig();
     if (!config.globalWebhookUrl) return 0;
     try {
       const url = `${config.globalWebhookUrl}?action=getResults&quizId=${quizId}`;
       const response = await fetch(url);
       const cloudResults: StudentSubmission[] = await response.json();
       
-      const localSubmissions = this.getSubmissions();
+      const localSubmissions = storageService.getSubmissions();
       let newCount = 0;
       
       cloudResults.forEach(cs => {
@@ -74,7 +80,7 @@ export const storageService = {
       localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(localSubmissions));
       return newCount;
     } catch (err) {
-      console.error("Lỗi đồng bộ kết quả:", err);
+      console.error("Lỗi đồng bộ bài làm từ Drive Vault:", err);
       return 0;
     }
   },
@@ -113,50 +119,5 @@ export const storageService = {
 
   saveAppConfig: (config: AppConfig) => {
     localStorage.setItem(KEY_CONFIG, JSON.stringify(config));
-  },
-
-  seedSampleData: () => {
-    const sampleQuiz: Quiz = {
-      id: 'sample-math-101',
-      title: 'Đề thi mẫu: Toán học & Logic',
-      classId: 'DEMO-101',
-      mode: QuizMode.TEST,
-      timeLimit: 15,
-      shuffleQuestions: true,
-      scoreType: ScoreType.EVEN,
-      totalScore: 10,
-      createdAt: Date.now(),
-      questions: [
-        {
-          id: 'q-sample-1',
-          text: '<p>Giải phương trình bậc hai sau: $x^2 - 5x + 6 = 0$. Giá trị của $x$ là:</p>',
-          options: ['$x=1, x=6$', '$x=2, x=3$', '$x=-2, x=-3$', '$x=5, x=1$'],
-          correctAnswer: 1,
-          points: 3.33
-        },
-        {
-          id: 'q-sample-2',
-          text: '<p>Đạo hàm của hàm số $y = \sin(x)$ là gì?</p>',
-          options: ['$\cos(x)$', '$-\cos(x)$', '$\tan(x)$', '$\sin^2(x)$'],
-          correctAnswer: 0,
-          points: 3.33
-        },
-        {
-          id: 'q-sample-3',
-          text: '<p>Ai là tác giả của thuyết tương đối?</p><img src="https://upload.wikimedia.org/wikipedia/commons/d/d3/Albert_Einstein_Head.jpg" class="w-32 h-auto my-2 rounded-lg" />',
-          options: ['Isaac Newton', 'Marie Curie', 'Albert Einstein', 'Nikola Tesla'],
-          correctAnswer: 2,
-          points: 3.34
-        }
-      ]
-    };
-    
-    const quizzes = storageService.getQuizzes();
-    if (!quizzes.find(q => q.id === sampleQuiz.id)) {
-      quizzes.push(sampleQuiz);
-      localStorage.setItem(KEY_QUIZZES, JSON.stringify(quizzes));
-      return true;
-    }
-    return false;
   }
 };
