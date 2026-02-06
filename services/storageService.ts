@@ -16,29 +16,67 @@ export const storageService = {
   },
 
   async getQuizFromCloud(quizId: string): Promise<Quiz | null> {
-    // Đọc lại config mới nhất (phòng trường hợp App.tsx vừa lưu w= vào máy)
     const config = this.getAppConfig();
-    if (!config.globalWebhookUrl) {
-      console.warn("Chưa có Webhook URL để tải đề từ Cloud.");
-      return null;
-    }
+    if (!config.globalWebhookUrl) return null;
 
     try {
       const url = `${config.globalWebhookUrl}?action=getQuiz&quizId=${quizId}`;
       const response = await fetch(url);
-      
-      if (!response.ok) throw new Error("Network error");
-      
+      if (!response.ok) return null;
       const result = await response.json();
-      
       if (result && result.id) {
         this.saveQuiz(result);
         return result;
       }
     } catch (err) {
-      console.error("Không thể tải đề từ Cloud:", err);
+      console.error("Lỗi tải đề từ Cloud:", err);
     }
     return null;
+  },
+
+  async syncAllQuizzesFromCloud(): Promise<number> {
+    const config = this.getAppConfig();
+    if (!config.globalWebhookUrl) return 0;
+    try {
+      const url = `${config.globalWebhookUrl}?action=listQuizzes`;
+      const response = await fetch(url);
+      const cloudQuizzes: Quiz[] = await response.json();
+      let count = 0;
+      cloudQuizzes.forEach(q => {
+        this.saveQuiz(q);
+        count++;
+      });
+      return count;
+    } catch (err) {
+      console.error("Lỗi đồng bộ danh sách đề:", err);
+      return 0;
+    }
+  },
+
+  async syncResultsFromCloud(quizId: string): Promise<number> {
+    const config = this.getAppConfig();
+    if (!config.globalWebhookUrl) return 0;
+    try {
+      const url = `${config.globalWebhookUrl}?action=getResults&quizId=${quizId}`;
+      const response = await fetch(url);
+      const cloudResults: StudentSubmission[] = await response.json();
+      
+      const localSubmissions = this.getSubmissions();
+      let newCount = 0;
+      
+      cloudResults.forEach(cs => {
+        if (!localSubmissions.find(ls => ls.id === cs.id)) {
+          localSubmissions.push(cs);
+          newCount++;
+        }
+      });
+      
+      localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(localSubmissions));
+      return newCount;
+    } catch (err) {
+      console.error("Lỗi đồng bộ kết quả:", err);
+      return 0;
+    }
   },
 
   saveQuiz: (quiz: Quiz) => {
