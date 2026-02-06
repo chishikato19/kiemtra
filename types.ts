@@ -19,16 +19,41 @@ export enum ScoreType {
   MANUAL = 'MANUAL'
 }
 
+export enum QuestionType {
+  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
+  SHORT_ANSWER = 'SHORT_ANSWER',
+  TRUE_FALSE = 'TRUE_FALSE',
+  MATCHING = 'MATCHING'
+}
+
+export interface MatchingPair {
+  left: string;
+  right: string;
+}
+
 export interface Question {
   id: string;
+  type: QuestionType;
+  partId: string; 
+  partTitle?: string;
   text: string; 
-  options: string[];
-  correctAnswer: number; 
+  options: string[]; // Dùng cho MCQ
+  correctAnswer: number; // Dùng cho MCQ (index)
+  trueFalseAnswer?: boolean; // Dùng cho TRUE_FALSE
+  shortAnswerText?: string; // Dùng cho SHORT_ANSWER
+  matchingPairs?: MatchingPair[]; // Dùng cho MATCHING
   points: number; 
+  isFixed?: boolean; 
 }
 
 export interface AppConfig {
-  globalWebhookUrl: string; // Link duy nhất cho toàn bộ ứng dụng
+  globalWebhookUrl: string;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
 }
 
 export interface Quiz {
@@ -41,9 +66,11 @@ export interface Quiz {
   createdAt: number;
   timeLimit?: number; 
   shuffleQuestions?: boolean;
+  shuffleOptions?: boolean; 
   isLocked?: boolean; 
   scoreType: ScoreType; 
   totalScore: number; 
+  folderId?: string;
 }
 
 export interface StudentSubmission {
@@ -53,7 +80,8 @@ export interface StudentSubmission {
   studentClass: string;
   score: number;
   totalQuestions: number;
-  answers: number[];
+  answers: any[]; // Có thể là number, string hoặc array (cho matching)
   submittedAt: number;
+  startTime: number;
   timeTaken: number; 
 }

@@ -25,12 +25,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, title, onBack }) => {
             )}
             <div className="flex flex-col">
               <h1 className="text-lg font-black tracking-tighter leading-none">{title}</h1>
-              <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">v2.5 Evolution Edition</span>
+              <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">v4.5 Ultimate Edition</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="px-3 py-1 bg-indigo-500 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-inner">
-              PRO
+              ENTERPRISE
             </div>
           </div>
         </div>
@@ -41,9 +41,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, title, onBack }) => {
       <footer className="py-6 text-center space-y-2">
         <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">QuizMaster Pro &copy; {new Date().getFullYear()}</p>
         <div className="flex justify-center gap-4 text-[10px] font-bold text-slate-300 uppercase">
-          <span>Word Parsing</span>
-          <span>LaTeX Support</span>
-          <span>Cloud Ready</span>
+          <span>Smart Shuffling</span>
+          <span>PDF Reporting</span>
+          <span>Cloud Vault v4.5</span>
         </div>
       </footer>
     </div>
