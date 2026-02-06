@@ -111,6 +111,12 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
     setTimeout(() => setStage('result'), 1000);
   };
 
+  const handleClose = () => {
+    window.close();
+    // Fallback nếu trình duyệt chặn window.close()
+    alert("Vui lòng đóng tab này trên trình duyệt của bạn. Kết quả đã được ghi nhận an toàn!");
+  };
+
   if (stage === 'loading') return <div className="p-20 text-center font-black text-indigo-600 animate-pulse">ĐANG TẢI...</div>;
 
   if (stage === 'login') return (
@@ -180,13 +186,22 @@ export const StudentQuizArea: React.FC<{ quizId: string }> = ({ quizId }) => {
   if (stage === 'result') {
     const sub = storageService.getSubmissions(quizId).find(s => s.studentName === studentInfo.name) || { score: 0 };
     return (
-      <div className="max-w-2xl mx-auto space-y-8 mt-10 text-center pb-20">
+      <div className="max-w-2xl mx-auto space-y-8 mt-10 text-center pb-20 fade-in">
         <div className="bg-white p-16 rounded-[5rem] shadow-2xl border-t-[16px] border-indigo-600">
-          <h2 className="text-4xl font-black uppercase italic mb-10">KẾT QUẢ</h2>
-          <div className="text-[12rem] font-black text-indigo-600 italic leading-none">{sub.score.toFixed(1)}</div>
-          <p className="text-xl text-slate-500 font-medium mt-16">Chúc mừng học sinh đã hoàn thành!</p>
+          <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner">🏆</div>
+          <h2 className="text-4xl font-black uppercase italic mb-10 text-slate-800">KẾT QUẢ CỦA BẠN</h2>
+          <div className="text-[12rem] font-black text-indigo-600 italic leading-none drop-shadow-xl">{sub.score.toFixed(1)}</div>
+          <p className="text-xl text-slate-500 font-medium mt-16 px-10">Chúc mừng <span className="text-indigo-600 font-black">{studentInfo.name}</span> đã hoàn thành bài thi một cách xuất sắc!</p>
         </div>
-        <button onClick={() => window.location.hash = ''} className="px-12 py-5 bg-slate-200 text-slate-500 rounded-3xl font-black uppercase text-xs">Về trang chủ</button>
+        <div className="space-y-4">
+          <button 
+            onClick={handleClose} 
+            className="px-16 py-6 bg-rose-600 text-white rounded-[2.5rem] font-black uppercase text-sm shadow-2xl shadow-rose-100 hover:bg-rose-700 hover:scale-105 transition-all"
+          >
+            Đóng cửa sổ thi
+          </button>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">Kết quả đã được hệ thống lưu trữ tự động</p>
+        </div>
       </div>
     );
   }
