@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Quiz, QuizMode, PracticeType, Question, ScoreType } from '../../types';
+/* Added QuestionType to the import list from types.ts */
+import { Quiz, QuizMode, PracticeType, Question, ScoreType, QuestionType } from '../../types';
 import { parseWordFile } from '../../services/parserService';
 import { storageService } from '../../services/storageService';
 import { QuestionEditor } from './QuestionEditor';
@@ -12,6 +13,7 @@ interface QuizCreateFormProps {
 
 export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizToEdit }) => {
   const [isParsing, setIsParsing] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [parseStatus, setParseStatus] = useState<{ type: 'idle' | 'success' | 'error', message?: string }>({ type: 'idle' });
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -21,31 +23,27 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
     practiceType: PracticeType.REVIEW_END,
     timeLimit: 0,
     shuffleQuestions: true,
+    shuffleOptions: true,
     scoreType: ScoreType.EVEN,
     totalScore: 10,
     questions: []
   });
 
   useEffect(() => {
-    if (quizToEdit) {
-      setFormData(quizToEdit);
-    }
+    if (quizToEdit) setFormData(quizToEdit);
   }, [quizToEdit]);
 
   useEffect(() => {
     if (formData.scoreType === ScoreType.EVEN && formData.questions?.length) {
       const questionsCount = formData.questions.length;
       const pointPerQuestion = parseFloat((formData.totalScore! / questionsCount).toFixed(2));
-      
       const updatedQuestions = formData.questions.map((q, idx) => ({
         ...q,
         points: idx === questionsCount - 1 
           ? parseFloat((formData.totalScore! - (pointPerQuestion * (questionsCount - 1))).toFixed(2))
           : pointPerQuestion
       }));
-      
-      const hasChanged = JSON.stringify(updatedQuestions.map(q => q.points)) !== JSON.stringify(formData.questions.map(q => q.points));
-      if (hasChanged) {
+      if (JSON.stringify(updatedQuestions.map(q => q.points)) !== JSON.stringify(formData.questions.map(q => q.points))) {
         setFormData(prev => ({ ...prev, questions: updatedQuestions }));
       }
     }
@@ -54,246 +52,210 @@ export const QuizCreateForm: React.FC<QuizCreateFormProps> = ({ onSuccess, quizT
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsParsing(true);
     setParseStatus({ type: 'idle' });
-    
     try {
       const result = await parseWordFile(file);
-      const newQuestions = result.questions.map(q => ({ ...q, points: 0 }));
       setFormData(prev => ({
         ...prev,
         title: prev.title || result.title,
-        questions: [...(prev.questions || []), ...newQuestions]
+        questions: [...(prev.questions || []), ...result.questions]
       }));
-      setParseStatus({ type: 'success', message: `Đã tải thành công ${result.questions.length} câu hỏi!` });
+      setParseStatus({ type: 'success', message: `Đã nạp ${result.questions.length} câu hỏi thành công!` });
     } catch (err: any) {
-      setParseStatus({ type: 'error', message: err.message || "Lỗi không xác định khi đọc file." });
+      setParseStatus({ type: 'error', message: err.message || "Lỗi định dạng file hoặc nội dung." });
     } finally {
       setIsParsing(false);
-      e.target.value = ''; // Reset input file
+      e.target.value = '';
     }
   };
 
   const handleSaveQuestion = (q: Question) => {
     const updated = [...(formData.questions || [])];
-    if (editingIndex !== null) {
-      updated[editingIndex] = q;
-    } else {
-      updated.push(q);
-    }
+    if (editingIndex !== null) updated[editingIndex] = q;
+    else updated.push(q);
     setFormData({ ...formData, questions: updated });
     setEditingIndex(null);
     setIsAddingNew(false);
   };
 
-  const deleteQuestion = (idx: number) => {
-    if (confirm('Xóa câu hỏi này?')) {
-      const updated = [...(formData.questions || [])];
-      updated.splice(idx, 1);
-      setFormData({ ...formData, questions: updated });
-    }
-  };
-
   const saveQuiz = () => {
     if (!formData.title || !formData.classId || !formData.questions?.length) {
-      alert("Vui lòng nhập đủ tên đề, lớp và có ít nhất 1 câu hỏi!");
+      alert("Vui lòng nhập đủ thông tin và có ít nhất 1 câu hỏi!");
       return;
     }
-    
-    let finalTotalScore = formData.totalScore || 10;
-    if (formData.scoreType === ScoreType.MANUAL) {
-      finalTotalScore = formData.questions.reduce((acc, q) => acc + (q.points || 0), 0);
-    }
-
     const finalQuiz: Quiz = {
       ...formData,
       id: formData.id || `q-${Date.now()}`,
       createdAt: formData.createdAt || Date.now(),
-      totalScore: finalTotalScore
+      totalScore: formData.scoreType === ScoreType.EVEN ? formData.totalScore! : formData.questions.reduce((a, q) => a + (q.points || 0), 0)
     } as Quiz;
-    
     storageService.saveQuiz(finalQuiz);
     onSuccess();
   };
 
   return (
-    <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in relative overflow-hidden">
-      {/* Overlay Loading khi đang parse */}
+    <div className="bg-white p-10 rounded-[3rem] border shadow-2xl space-y-8 fade-in relative">
       {isParsing && (
         <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black text-indigo-600 uppercase tracking-widest animate-pulse">Đang phân tích file Word...</p>
+          <p className="font-black text-indigo-600 uppercase tracking-widest">Đang bóc tách đề thi...</p>
         </div>
       )}
 
       <div className="flex justify-between items-center border-b pb-6">
-        <h3 className="text-2xl font-black text-indigo-600 tracking-tight">
-          {quizToEdit ? 'CHỈNH SỬA ĐỀ THI' : 'THIẾT LẬP ĐỀ THI MỚI'}
-        </h3>
-        <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest">v2.8 Smart Parser</div>
+        <h3 className="text-2xl font-black text-indigo-600 tracking-tight uppercase">THIẾT LẬP ĐỀ THI</h3>
+        <button onClick={() => setShowHelp(true)} className="text-[10px] font-black text-indigo-600 border-2 border-indigo-100 px-5 py-2 rounded-full uppercase hover:bg-indigo-50 transition-all">📘 Hướng dẫn soạn File Word</button>
       </div>
       
-      <div className="grid md:grid-cols-2 gap-8">
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Tên đề thi / Môn học</label>
-          <input 
-            type="text" 
-            value={formData.title || ''} 
-            onChange={e => setFormData({...formData, title: e.target.value})}
-            className="w-full border-2 p-4 rounded-2xl focus:border-indigo-600 outline-none transition-all font-bold bg-slate-50 focus:bg-white"
-            placeholder="Ví dụ: Kiểm tra Giải tích Chương 1"
-          />
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Tên đề thi</label>
+          <input type="text" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full border-2 p-4 rounded-2xl font-bold bg-slate-50 focus:bg-white outline-none focus:border-indigo-600 transition-all" placeholder="Tên đề thi" />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Mã lớp</label>
-          <input 
-            type="text" 
-            value={formData.classId || ''} 
-            onChange={e => setFormData({...formData, classId: e.target.value})}
-            className="w-full border-2 p-4 rounded-2xl focus:border-indigo-600 outline-none transition-all font-bold bg-slate-50 focus:bg-white"
-            placeholder="Ví dụ: 12A3"
-          />
+          <input type="text" value={formData.classId || ''} onChange={e => setFormData({...formData, classId: e.target.value})} className="w-full border-2 p-4 rounded-2xl font-bold bg-slate-50 focus:bg-white outline-none focus:border-indigo-600 transition-all" placeholder="Lớp (VD: 12A1)" />
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="space-y-2">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-1">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Chế độ</label>
-          <select 
-            className="w-full border-2 p-4 rounded-2xl font-bold outline-none focus:border-indigo-600 bg-slate-50 focus:bg-white appearance-none"
-            value={formData.mode}
-            onChange={e => setFormData({...formData, mode: e.target.value as QuizMode})}
-          >
+          <select className="w-full border-2 p-4 rounded-2xl font-bold bg-slate-50" value={formData.mode} onChange={e => setFormData({...formData, mode: e.target.value as QuizMode})}>
             <option value={QuizMode.TEST}>Kỳ thi (Tập trung)</option>
             <option value={QuizMode.PRACTICE}>Luyện tập (Tự do)</option>
           </select>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Thời gian (Phút)</label>
-          <input 
-            type="number" 
-            value={formData.timeLimit || 0} 
-            onChange={e => setFormData({...formData, timeLimit: parseInt(e.target.value) || 0})}
-            className="w-full border-2 p-4 rounded-2xl focus:border-indigo-600 outline-none font-bold bg-slate-50 focus:bg-white"
-            placeholder="0 = Không giới hạn"
-          />
+          <input type="number" value={formData.timeLimit || 0} onChange={e => setFormData({...formData, timeLimit: parseInt(e.target.value) || 0})} className="w-full border-2 p-4 rounded-2xl font-bold bg-slate-50" placeholder="0 = Vô hạn" />
         </div>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Đảo câu hỏi</label>
-          <div className="flex items-center h-[58px] bg-slate-50 rounded-2xl px-4 border-2 border-transparent">
-             <input 
-              type="checkbox" 
-              checked={formData.shuffleQuestions} 
-              onChange={e => setFormData({...formData, shuffleQuestions: e.target.checked})}
-              className="w-5 h-5 accent-indigo-600"
-              id="shuffle-toggle"
-            />
-            <label htmlFor="shuffle-toggle" className="ml-3 font-bold text-slate-600 cursor-pointer">Kích hoạt xáo trộn</label>
-          </div>
+        <div className="flex items-center h-[60px] bg-slate-50 rounded-2xl px-4 border-2 border-transparent mt-5">
+          <input type="checkbox" checked={formData.shuffleQuestions} onChange={e => setFormData({...formData, shuffleQuestions: e.target.checked})} className="w-5 h-5 accent-indigo-600" id="shuffle-q" />
+          <label htmlFor="shuffle-q" className="ml-3 font-bold text-slate-600 text-xs cursor-pointer">Đảo câu hỏi (Trừ 📌)</label>
         </div>
-      </div>
-
-      <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 space-y-6">
-        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest">Cấu hình điểm số</h4>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-3">Phương thức</label>
-            <div className="flex bg-white p-1 rounded-xl border border-indigo-200">
-              <button 
-                onClick={() => setFormData({...formData, scoreType: ScoreType.EVEN})}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${formData.scoreType === ScoreType.EVEN ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-400'}`}
-              >
-                Chia đều
-              </button>
-              <button 
-                onClick={() => setFormData({...formData, scoreType: ScoreType.MANUAL})}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${formData.scoreType === ScoreType.MANUAL ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-400'}`}
-              >
-                Tùy chỉnh
-              </button>
-            </div>
-          </div>
-          {formData.scoreType === ScoreType.EVEN && (
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-3">Tổng điểm mong muốn</label>
-              <input 
-                type="number" 
-                value={formData.totalScore || 10} 
-                onChange={e => setFormData({...formData, totalScore: parseFloat(e.target.value) || 0})}
-                className="w-full border-2 p-3 rounded-xl focus:border-indigo-600 outline-none font-bold bg-white"
-              />
-            </div>
-          )}
+        <div className="flex items-center h-[60px] bg-slate-50 rounded-2xl px-4 border-2 border-transparent mt-5">
+          <input type="checkbox" checked={formData.shuffleOptions} onChange={e => setFormData({...formData, shuffleOptions: e.target.checked})} className="w-5 h-5 accent-indigo-600" id="shuffle-opt" />
+          <label htmlFor="shuffle-opt" className="ml-3 font-bold text-slate-600 text-xs cursor-pointer">Đảo đáp án (MCQ)</label>
         </div>
       </div>
 
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h4 className="font-black text-slate-700 uppercase tracking-widest text-[10px]">Quản lý câu hỏi ({formData.questions?.length || 0})</h4>
+          <h4 className="font-black text-slate-700 uppercase tracking-widest text-[10px]">Câu hỏi trong đề ({formData.questions?.length || 0})</h4>
           <div className="flex gap-2">
-            <label className="cursor-pointer bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
-              <span>📂 TẢI FILE WORD</span>
+            <label className="cursor-pointer bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 transition-all">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              NẠP TỪ FILE WORD
               <input type="file" accept=".docx" className="hidden" onChange={handleFileUpload} />
             </label>
-            <button 
-              onClick={() => setIsAddingNew(true)}
-              className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter hover:bg-slate-200 transition-all"
-            >
-              + THÊM THỦ CÔNG
-            </button>
+            <button onClick={() => setIsAddingNew(true)} className="bg-slate-100 text-slate-600 px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">+ THÊM CÂU THỦ CÔNG</button>
           </div>
         </div>
 
-        {/* Thông báo kết quả nạp đề */}
         {parseStatus.type !== 'idle' && (
-          <div className={`p-4 rounded-2xl flex items-center gap-3 fade-in ${parseStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>
-            <span className="text-xl">{parseStatus.type === 'success' ? '✅' : '❌'}</span>
-            <p className="text-xs font-bold uppercase tracking-tight">{parseStatus.message}</p>
-            <button onClick={() => setParseStatus({type: 'idle'})} className="ml-auto text-xs opacity-50 font-black">ĐÓNG</button>
+          <div className={`p-5 rounded-2xl text-[10px] font-black uppercase flex items-center gap-3 animate-bounce ${parseStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+            <span className="text-xl">{parseStatus.type === 'success' ? '✓' : '⚠️'}</span>
+            {parseStatus.message}
           </div>
         )}
 
-        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-3 custom-scrollbar">
+        <div className="space-y-3 max-h-[450px] overflow-y-auto pr-3 custom-scrollbar">
           {formData.questions?.length === 0 ? (
-            <div className="bg-slate-50 border-2 border-dashed rounded-[2rem] p-12 text-center text-slate-400 font-medium italic">
-              Danh sách câu hỏi đang trống. Vui lòng tải file Word (.docx) đúng định dạng.
+            <div className="py-20 text-center border-2 border-dashed rounded-[2.5rem] bg-slate-50/50">
+               <p className="text-slate-400 font-bold italic">Chưa có câu hỏi nào. Hãy nạp file Word hoặc thêm mới.</p>
             </div>
-          ) : (
-            formData.questions?.map((q, idx) => (
-              <div key={idx} className="bg-white border-2 border-slate-50 p-5 rounded-2xl flex justify-between items-start group hover:border-indigo-100 transition-all shadow-sm">
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    <span className="bg-indigo-600 text-white font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-widest">Câu {idx + 1}</span>
-                    <span className="bg-emerald-50 text-emerald-600 font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-widest">ĐÁP ÁN: {String.fromCharCode(65 + q.correctAnswer)}</span>
-                    <span className="bg-amber-100 text-amber-600 font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-widest">Điểm: {q.points}</span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-600 truncate prose-sm" dangerouslySetInnerHTML={{ __html: q.text }} />
+          ) : formData.questions?.map((q, idx) => (
+            <div key={idx} className="bg-white border-2 border-slate-50 p-5 rounded-2xl flex justify-between items-start hover:border-indigo-100 transition-all group shadow-sm">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-indigo-600 text-white font-black text-[9px] px-2 py-0.5 rounded uppercase tracking-tighter">Câu {idx + 1}</span>
+                  <span className="bg-slate-100 text-slate-400 font-black text-[9px] px-2 py-0.5 rounded uppercase tracking-tighter">{q.partId}</span>
+                  {q.isFixed && <span className="bg-amber-100 text-amber-600 font-black text-[9px] px-2 py-0.5 rounded uppercase tracking-tighter">📌 CỐ ĐỊNH</span>}
+                  <span className={`font-black text-[9px] px-2 py-0.5 rounded uppercase tracking-tighter ${
+                    q.type === 'MULTIPLE_CHOICE' ? 'bg-indigo-50 text-indigo-600' :
+                    q.type === 'TRUE_FALSE' ? 'bg-emerald-50 text-emerald-600' :
+                    q.type === 'MATCHING' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {q.type === 'MULTIPLE_CHOICE' ? 'Trắc nghiệm' : 
+                     q.type === 'TRUE_FALSE' ? 'Đúng/Sai' : 
+                     q.type === 'MATCHING' ? 'Ghép nối' : 'Trả lời ngắn'}
+                  </span>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => setEditingIndex(idx)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.6} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  </button>
-                  <button onClick={() => deleteQuestion(idx)} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.6} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </button>
-                </div>
+                <div className="text-sm font-bold text-slate-600 line-clamp-2" dangerouslySetInnerHTML={{ __html: q.text }} />
               </div>
-            ))
-          )}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => setEditingIndex(idx)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl" title="Chỉnh sửa">✏️</button>
+                <button onClick={() => { const u = [...formData.questions!]; u.splice(idx,1); setFormData({...formData, questions:u}); }} className="p-2 text-red-400 hover:bg-red-50 rounded-xl" title="Xóa">🗑️</button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      <button 
-        onClick={saveQuiz}
-        className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xl shadow-xl hover:shadow-2xl hover:bg-indigo-700 transition-all active:scale-[0.98] uppercase tracking-tighter"
-      >
-        {quizToEdit ? 'CẬP NHẬT ĐỀ THI' : 'LƯU VÀ PHÁT HÀNH ĐỀ THI'}
-      </button>
+      <button onClick={saveQuiz} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xl shadow-xl hover:bg-indigo-700 uppercase tracking-tighter transition-all hover:scale-[1.01] active:scale-95">Lưu và Phát hành Đề thi ngay</button>
+
+      {showHelp && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-[4rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
+               <h3 className="text-2xl font-black uppercase italic tracking-tighter">Hướng dẫn chuẩn hóa File Word</h3>
+               <button onClick={() => setShowHelp(false)} className="p-2 bg-white/20 rounded-full hover:bg-white/40">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+               </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-10 space-y-8 custom-scrollbar">
+              <section className="space-y-4">
+                <h4 className="font-black text-indigo-600 uppercase text-xs tracking-widest border-l-4 border-indigo-600 pl-3">1. Cấu trúc câu hỏi</h4>
+                <div className="bg-slate-900 p-6 rounded-3xl font-mono text-xs leading-relaxed text-emerald-400 shadow-inner">
+                  Câu 1: Thủ đô của Việt Nam là gì?<br/>
+                  A. Hà Nội<br/>
+                  B. Đà Nẵng<br/>
+                  C. TP.HCM<br/>
+                  D. Cần Thơ<br/><br/>
+                  Câu 2: Năm 2024 là năm nhuận, đúng hay sai?<br/>
+                  Câu 3: Ai là người phát minh ra bóng đèn?
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h4 className="font-black text-indigo-600 uppercase text-xs tracking-widest border-l-4 border-indigo-600 pl-3">2. Bảng đáp án (Đặt ở cuối file)</h4>
+                <p className="text-xs text-slate-500 font-medium">Hệ thống dựa vào đây để phân loại câu hỏi tự động:</p>
+                <div className="bg-indigo-50 p-6 rounded-3xl font-mono text-xs leading-relaxed text-indigo-600 border border-indigo-100">
+                  <b className="uppercase">ĐÁP ÁN</b><br/>
+                  1-A, 2-Đ, 3-Edison, 4-S, 15-(1-a, 2-c, 3-b)
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-white border p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Trắc nghiệm</p>
+                      <p className="text-xs font-bold text-slate-700">Ghi A, B, C hoặc D</p>
+                   </div>
+                   <div className="bg-white border p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Đúng / Sai</p>
+                      <p className="text-xs font-bold text-slate-700">Ghi Đ (hoặc T) / S (hoặc F)</p>
+                   </div>
+                   <div className="bg-white border p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Trả lời ngắn</p>
+                      <p className="text-xs font-bold text-slate-700">Ghi nội dung đáp án cụ thể</p>
+                   </div>
+                   <div className="bg-white border p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Ghép nối</p>
+                      <p className="text-xs font-bold text-slate-700">Ghi cặp trong ngoặc (1-a, 2-b)</p>
+                   </div>
+                </div>
+              </section>
+            </div>
+            <div className="p-8 bg-slate-50 border-t flex justify-center">
+              <button onClick={() => setShowHelp(false)} className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Đã hiểu quy tắc</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(editingIndex !== null || isAddingNew) && (
         <QuestionEditor 
-          question={editingIndex !== null ? formData.questions![editingIndex] : { id: `q-${Date.now()}`, points: formData.scoreType === ScoreType.EVEN ? 0 : 1 }}
+          question={editingIndex !== null ? formData.questions![editingIndex] : { id: `q-${Date.now()}`, points: 0, partId: 'part-1', isFixed: false, type: QuestionType.MULTIPLE_CHOICE }}
           onSave={handleSaveQuestion}
           onCancel={() => { setEditingIndex(null); setIsAddingNew(false); }}
           isManualScore={formData.scoreType === ScoreType.MANUAL}

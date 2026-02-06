@@ -69,6 +69,7 @@ export const StudentInterface: React.FC<{quizId: string}> = ({ quizId }) => {
       return acc + (ans === quiz.questions[idx].correctAnswer ? 1 : 0);
     }, 0);
     
+    // Fix: Add missing startTime property to conform to StudentSubmission interface
     const submission: StudentSubmission = {
       id: `s-${Date.now()}`,
       quizId: quiz.id,
@@ -78,6 +79,7 @@ export const StudentInterface: React.FC<{quizId: string}> = ({ quizId }) => {
       totalQuestions: quiz.questions.length,
       answers: finalAnswers,
       submittedAt: Date.now(),
+      startTime: startTime,
       timeTaken: Math.floor((Date.now() - startTime) / 1000)
     };
     

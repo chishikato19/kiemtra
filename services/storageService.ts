@@ -1,14 +1,34 @@
 
-import { Quiz, QuizMode, PracticeType, StudentSubmission, ScoreType, AppConfig } from "../types";
+import { Quiz, QuizMode, PracticeType, StudentSubmission, ScoreType, AppConfig, Folder } from "../types";
 
 const KEY_QUIZZES = 'qm_quizzes';
 const KEY_SUBMISSIONS = 'qm_submissions';
 const KEY_CONFIG = 'qm_global_config';
+const KEY_FOLDERS = 'qm_folders';
 
 export const storageService = {
   getQuizzes: (): Quiz[] => {
     const data = localStorage.getItem(KEY_QUIZZES);
     return data ? JSON.parse(data) : [];
+  },
+
+  getFolders: (): Folder[] => {
+    const data = localStorage.getItem(KEY_FOLDERS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  saveFolder: (folder: Folder) => {
+    const folders = storageService.getFolders();
+    folders.push(folder);
+    localStorage.setItem(KEY_FOLDERS, JSON.stringify(folders));
+  },
+
+  deleteFolder: (id: string) => {
+    const folders = storageService.getFolders().filter(f => f.id !== id);
+    localStorage.setItem(KEY_FOLDERS, JSON.stringify(folders));
+    // Move quizzes in this folder to root
+    const quizzes = storageService.getQuizzes().map(q => q.folderId === id ? { ...q, folderId: undefined } : q);
+    localStorage.setItem(KEY_QUIZZES, JSON.stringify(quizzes));
   },
 
   getQuizById: (id: string): Quiz | undefined => {
