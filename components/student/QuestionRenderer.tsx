@@ -6,13 +6,14 @@ interface QuestionRendererProps {
   question: Question;
   userAnswer: any;
   onSelect: (val: any) => void;
-  disabled?: boolean; // Thêm prop disabled để dùng trong chế độ xem lại bài
+  disabled?: boolean; 
 }
 
 export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, userAnswer, onSelect, disabled = false }) => {
   const q = question;
   const currentAns = userAnswer;
 
+  // 1. TRẮC NGHIỆM: Hiện nút chọn A, B, C, D
   if (q.type === QuestionType.MULTIPLE_CHOICE) {
     return (
       <div className="grid gap-3">
@@ -33,6 +34,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
     );
   }
 
+  // 2. ĐÚNG / SAI: Hiện 2 nút lớn Đúng và Sai
   if (q.type === QuestionType.TRUE_FALSE) {
     return (
       <div className="grid grid-cols-2 gap-4">
@@ -56,6 +58,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
     );
   }
 
+  // 3. TRẢ LỜI NGẮN: CHỈ DUY NHẤT DẠNG NÀY MỚI HIỆN KHUNG NHẬP
   if (q.type === QuestionType.SHORT_ANSWER) {
     return (
       <div className="space-y-4 animate-fadeIn py-4">
@@ -71,7 +74,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
             disabled={disabled}
             className={`w-full border-4 p-7 rounded-[2.5rem] font-bold text-2xl outline-none transition-all shadow-inner ${disabled ? 'bg-slate-100 border-slate-200 text-slate-500' : 'border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-600'}`}
             placeholder={disabled ? "" : "Nhập nội dung tại đây..."}
-            value={String(currentAns || "")}
+            value={String(currentAns !== null && currentAns !== undefined ? currentAns : "")}
             onChange={(e) => onSelect(e.target.value)}
           />
           {!disabled && (
@@ -87,6 +90,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
     );
   }
 
+  // 4. GHÉP NỐI: Hiện các select box
   if (q.type === QuestionType.MATCHING) {
     const handleMatchingSelect = (pairIdx: number, selectionIdx: number) => {
       if (disabled) return;
