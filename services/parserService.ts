@@ -12,6 +12,7 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
         
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
+        // Lấy tất cả các thẻ có khả năng chứa nội dung
         const paragraphs = Array.from(doc.querySelectorAll('p, li, tr, td'));
         
         let questions: Question[] = [];
@@ -20,40 +21,34 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
         let currentPartTitle = "Phần 1";
         let answerTable: Record<number, any> = {};
 
-        // 1. Phân tích Bảng đáp án để xác định loại câu hỏi
+        // 1. Phân tích Bảng đáp án để xác định loại câu hỏi (nếu có)
         const fullText = (doc.body as HTMLElement).innerText;
         const stopIndex = fullText.search(/BẢNG ĐÁP ÁN|ĐÁP ÁN/i);
         
         if (stopIndex !== -1) {
           const tableText = fullText.substring(stopIndex);
-          // Tách linh hoạt hơn với nhiều loại dấu phân cách
           const answerSegments = tableText.split(/[\n,;|\t]/);
           
           answerSegments.forEach(seg => {
             const trimmedSeg = seg.trim();
             if (!trimmedSeg) return;
 
-            // Cấu trúc: số câu - đáp án (ví dụ: 1-A, 2.Paris, 3:Đ)
             const match = trimmedSeg.match(/^(\d+)\s*[:.-]\s*(.*)$/i);
             if (match) {
               const qNum = parseInt(match[1]);
               const val = match[2].trim();
 
-              // Kiểm tra Trắc nghiệm
               if (val.match(/^[A-D]$/i)) {
                 answerTable[qNum] = { type: QuestionType.MULTIPLE_CHOICE, val: val.toUpperCase() };
               }
-              // Kiểm tra Đúng/Sai
               else if (val.match(/^(Đ|S|T|F|True|False)$/i)) {
                 const indicator = val.toUpperCase()[0];
                 const isTrue = indicator === 'Đ' || indicator === 'T';
                 answerTable[qNum] = { type: QuestionType.TRUE_FALSE, val: isTrue };
               }
-              // Kiểm tra Ghép nối
               else if (val.match(/^\(.*\)$/)) {
                 answerTable[qNum] = { type: QuestionType.MATCHING, val: val.replace(/[()]/g, '') };
               }
-              // Mặc định là Trả lời ngắn
               else if (val.length > 0) {
                 answerTable[qNum] = { type: QuestionType.SHORT_ANSWER, val: val };
               }
@@ -61,16 +56,14 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
           });
         }
 
-        // 2. Duyệt Paragraphs để lấy nội dung câu hỏi
+        // 2. Duyệt từng đoạn văn để bóc tách câu hỏi và lựa chọn
         for (const p of paragraphs) {
           const htmlContent = p.innerHTML;
           const text = (p as HTMLElement).innerText.trim();
           if (!text) continue;
 
-          // Dừng khi gặp bảng đáp án
           if (text.match(/^(BẢNG ĐÁP ÁN|ĐÁP ÁN)/i)) break;
 
-          // Phát hiện Phần
           const partMatch = text.match(/^(Phần|PHẦN)\s*(\d+|[IVXLC]+)[:.-]?\s*(.*)/i);
           if (partMatch) {
             currentPartId = `part-${partMatch[2]}`;
@@ -78,7 +71,6 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
             continue;
           }
 
-          // Phát hiện Câu hỏi
           const qMatch = text.match(/^(?:Câu|Câu hỏi|Question)\s*(\d+)\s*[:.-]/i);
           if (qMatch) {
             if (currentQuestion && currentQuestion.text) {
@@ -106,33 +98,29 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
             } else if (ansInfo.type === QuestionType.SHORT_ANSWER) {
               currentQuestion.shortAnswerText = ansInfo.val;
             } else if (ansInfo.type === QuestionType.MATCHING) {
-              currentQuestion.matchingPairs = [{ left: 'Vế 1', right: 'Vế A' }]; 
+              currentQuestion.matchingPairs = []; 
             }
           } else if (currentQuestion) {
-            // PHÁT HIỆN LỰA CHỌN A, B, C, D
-            const optMatch = text.match(/^([A-D]|[a-d])\s*[:.)-]\s*(.*)/i);
+            // Kiểm tra xem dòng này có phải là lựa chọn A, B, C, D không
+            const optMatch = text.match(/^\s*([A-D]|[a-d])\s*[:.)-]\s*(.*)/i);
             
             if (optMatch) {
-              // NÂNG CẤP LOẠI CÂU HỎI: Nếu thấy A/B/C/D mà đang là SHORT_ANSWER -> Chuyển thành MCQ ngay
+              // Tự động nâng cấp lên Trắc nghiệm nếu phát hiện ký hiệu A, B, C, D
               if (currentQuestion.type === QuestionType.SHORT_ANSWER) {
                 currentQuestion.type = QuestionType.MULTIPLE_CHOICE;
                 currentQuestion.options = [];
-                // Nếu có đáp án ở bảng đáp án nhưng lúc đầu chưa nhận diện đúng MCQ
-                if (currentQuestion.shortAnswerText && currentQuestion.shortAnswerText.match(/^[A-D]$/i)) {
-                   currentQuestion.correctAnswer = currentQuestion.shortAnswerText.toUpperCase().charCodeAt(0) - 65;
-                }
               }
 
               if (currentQuestion.type === QuestionType.MULTIPLE_CHOICE) {
-                const optText = optMatch[2] || htmlContent.replace(/^[A-Da-d]\s*[:.)-]/i, '').trim();
+                const optText = optMatch[2].trim() || htmlContent.replace(/^\s*[A-Da-d]\s*[:.)-]/i, '').trim();
                 if (currentQuestion.options!.length < 4) {
                   currentQuestion.options!.push(optText);
                 }
-                continue; // Đã xử lý xong hàng này là option
+                continue; 
               }
             }
             
-            // Nếu không phải option hoặc không phải MCQ, gộp vào text câu hỏi
+            // Nếu không phải lựa chọn, thì là nội dung nối tiếp của câu hỏi
             currentQuestion.text += " " + htmlContent;
           }
         }
@@ -141,7 +129,7 @@ export const parseWordFile = async (file: File): Promise<{questions: Question[],
           questions.push(currentQuestion as Question);
         }
 
-        if (questions.length === 0) throw new Error("Không tìm thấy câu hỏi hợp lệ trong file.");
+        if (questions.length === 0) throw new Error("Không tìm thấy câu hỏi nào. Hãy kiểm tra định dạng 'Câu 1:', 'Câu 2:'...");
 
         resolve({ questions, title: file.name.replace(/\.[^/.]+$/, "") });
       } catch (err) {
