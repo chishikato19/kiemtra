@@ -13,11 +13,11 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
   const q = question;
   const currentAns = userAnswer;
 
-  // 1. TRẮC NGHIỆM: Hiện nút chọn A, B, C, D
-  if (q.type === QuestionType.MULTIPLE_CHOICE) {
+  // 1. TRẮC NGHIỆM: Hiện nút chọn A, B, C, D. KHÔNG hiện input.
+  if (q.type === QuestionType.MULTIPLE_CHOICE || (q.options && q.options.length > 0 && q.type !== QuestionType.MATCHING)) {
     return (
       <div className="grid gap-3">
-        {q.options.map((opt, idx) => (
+        {q.options && q.options.length > 0 ? q.options.map((opt, idx) => (
           <button 
             key={idx} 
             disabled={disabled}
@@ -29,12 +29,14 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
             </span>
             <span className={`flex-1 font-bold ${currentAns === idx ? 'text-indigo-900' : 'text-slate-600'}`} dangerouslySetInnerHTML={{ __html: opt }} />
           </button>
-        ))}
+        )) : (
+          <div className="p-4 text-rose-500 font-bold bg-rose-50 rounded-xl">Lỗi: Câu hỏi trắc nghiệm nhưng không có lựa chọn A,B,C,D.</div>
+        )}
       </div>
     );
   }
 
-  // 2. ĐÚNG / SAI: Hiện 2 nút lớn Đúng và Sai
+  // 2. ĐÚNG / SAI: Hiện 2 nút lớn. KHÔNG hiện input.
   if (q.type === QuestionType.TRUE_FALSE) {
     return (
       <div className="grid grid-cols-2 gap-4">
@@ -58,39 +60,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
     );
   }
 
-  // 3. TRẢ LỜI NGẮN: CHỈ DUY NHẤT DẠNG NÀY MỚI HIỆN KHUNG NHẬP
-  if (q.type === QuestionType.SHORT_ANSWER) {
-    return (
-      <div className="space-y-4 animate-fadeIn py-4">
-        {!disabled && (
-          <div className="flex items-center gap-2 ml-4">
-            <span className="bg-indigo-600 w-2 h-2 rounded-full animate-pulse"></span>
-            <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Vui lòng nhập câu trả lời của bạn</label>
-          </div>
-        )}
-        <div className="relative group">
-          <input 
-            type="text" 
-            disabled={disabled}
-            className={`w-full border-4 p-7 rounded-[2.5rem] font-bold text-2xl outline-none transition-all shadow-inner ${disabled ? 'bg-slate-100 border-slate-200 text-slate-500' : 'border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-600'}`}
-            placeholder={disabled ? "" : "Nhập nội dung tại đây..."}
-            value={String(currentAns !== null && currentAns !== undefined ? currentAns : "")}
-            onChange={(e) => onSelect(e.target.value)}
-          />
-          {!disabled && (
-            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2.5 2.5 0 113.536 3.536L12 17.207l-4 1 1-4 9.414-9.414z" />
-              </svg>
-            </div>
-          )}
-        </div>
-        {!disabled && <p className="text-[10px] text-slate-400 italic ml-6 font-medium">Lưu ý: Hệ thống tự động so khớp đáp án (không phân biệt chữ HOA hay thường).</p>}
-      </div>
-    );
-  }
-
-  // 4. GHÉP NỐI: Hiện các select box
+  // 3. GHÉP NỐI: Hiện các select box
   if (q.type === QuestionType.MATCHING) {
     const handleMatchingSelect = (pairIdx: number, selectionIdx: number) => {
       if (disabled) return;
@@ -127,5 +97,34 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({ question, us
     );
   }
 
-  return null;
+  // 4. TRẢ LỜI NGẮN: CHỈ DUY NHẤT DẠNG NÀY MỚI HIỆN KHUNG NHẬP
+  // Mặc định trả về input nếu không khớp các loại trên hoặc là SHORT_ANSWER
+  return (
+    <div className="space-y-4 animate-fadeIn py-4">
+      {!disabled && (
+        <div className="flex items-center gap-2 ml-4">
+          <span className="bg-indigo-600 w-2 h-2 rounded-full animate-pulse"></span>
+          <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Vui lòng nhập câu trả lời của bạn</label>
+        </div>
+      )}
+      <div className="relative group">
+        <input 
+          type="text" 
+          disabled={disabled}
+          className={`w-full border-4 p-7 rounded-[2.5rem] font-bold text-2xl outline-none transition-all shadow-inner ${disabled ? 'bg-slate-100 border-slate-200 text-slate-500' : 'border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-600'}`}
+          placeholder={disabled ? "" : "Nhập nội dung tại đây..."}
+          value={String(currentAns !== null && currentAns !== undefined ? currentAns : "")}
+          onChange={(e) => onSelect(e.target.value)}
+        />
+        {!disabled && (
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2.5 2.5 0 113.536 3.536L12 17.207l-4 1 1-4 9.414-9.414z" />
+            </svg>
+          </div>
+        )}
+      </div>
+      {!disabled && <p className="text-[10px] text-slate-400 italic ml-6 font-medium">Lưu ý: Hệ thống tự động so khớp đáp án (không phân biệt chữ HOA hay thường).</p>}
+    </div>
+  );
 };
